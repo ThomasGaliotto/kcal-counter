@@ -32,6 +32,11 @@ USER_COLUMNS = {
     "weight_kg": "REAL",
     "life_factor": "REAL NOT NULL DEFAULT 1.2",        # vie quotidienne hors sport
     "protein_goal": "INTEGER",                         # g/jour ; vide = 1,6 g/kg (ou 100 g)
+    "goal_type": "TEXT",                               # lose | maintain | gain (vide = pas d'objectif)
+    "goal_weight": "REAL",                             # poids visé (kg)
+    "goal_date": "TEXT",                               # horizon (AAAA-MM-JJ)
+    "goal_start_weight": "REAL",
+    "goal_start_date": "TEXT",
     "strava_athlete": "TEXT",
     "strava_access": "TEXT",
     "strava_refresh": "TEXT",
@@ -98,6 +103,12 @@ def db() -> sqlite3.Connection:
             data TEXT NOT NULL,
             fetched_at TEXT NOT NULL,
             PRIMARY KEY (user_id, day, source)
+        );
+        CREATE TABLE IF NOT EXISTS weights (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            day TEXT NOT NULL,
+            kg REAL NOT NULL,
+            PRIMARY KEY (user_id, day)
         );
         CREATE TABLE IF NOT EXISTS strava_activity_kcal (
             activity_id INTEGER PRIMARY KEY,

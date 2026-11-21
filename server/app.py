@@ -17,6 +17,7 @@ from .auth import current_user
 from .auth import router as auth_router
 from .db import ROOT, db
 from .energy import router as energy_router
+from .goals import router as goals_router
 
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -78,6 +79,7 @@ def shrink(raw: bytes) -> str:
 app = FastAPI(title="kcal-counter")
 app.include_router(auth_router)
 app.include_router(energy_router)
+app.include_router(goals_router)
 
 
 @app.middleware("http")

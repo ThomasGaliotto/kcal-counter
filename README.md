@@ -20,6 +20,21 @@ Chacun a son propre journal et ses objectifs (kcal et eau), enregistrés sur le 
   `KCAL_INVITE_CODE=un-code-secret` au lancement. Il sera demandé à l'inscription.
 - Les mots de passe sont stockés hachés (scrypt). Une session dure 180 jours.
 
+## Objectif (perte de poids, maintien, prise de muscle)
+
+Compte → **🎯 Mon objectif** (ou la carte « Définir un objectif »). On choisit le type, le poids visé et un horizon ;
+l'app en déduit le bilan calorique et les protéines du jour, et les recalcule à chaque pesée (« ⚖️ Se peser »).
+
+| Objectif | Bilan visé par jour | Protéines |
+|---|---|---|
+| Perte de poids | (poids actuel − visé) × 7 700 kcal ÷ jours restants, plafonné à 1 % du poids/semaine et −1 000 kcal | 2,0 g/kg |
+| Maintien | 0 | 1,6 g/kg |
+| Prise de muscle | même calcul, plafonné à +500 kcal (+300 sans poids visé) | 1,8 g/kg |
+
+Si l'horizon est trop court, le rythme est plafonné et l'app indique la date réaliste.
+Sans source de dépense (Strava/Garmin), l'objectif kcal = métabolisme de base × vie quotidienne + bilan visé
+(il faut sexe, année de naissance et taille dans le profil).
+
 ## Dépense énergétique (Strava ou Garmin)
 
 Dans l'app : bouton du compte (en haut à droite) → **Dépense énergétique**. Trois modes au choix :

@@ -39,9 +39,53 @@
       <div><strong id="account-name"></strong><div id="account-email" class="muted"></div></div>
       <button id="account-close" class="remove" aria-label="Fermer">×</button>
     </div>
+    <button id="open-goal" class="sheet-btn">🎯 Mon objectif</button>
     <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
     <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
+  </dialog>
+
+  <dialog id="goal-dialog" class="sheet settings">
+    <form id="goal-form" method="dialog">
+      <div class="sheet-head">
+        <strong>🎯 Mon objectif</strong>
+        <button id="goal-close" type="button" class="remove" aria-label="Fermer">×</button>
+      </div>
+
+      <fieldset class="choices goal-types">
+        <label><input type="radio" name="goal-type" value="lose">
+          <span><b>📉 Perdre du poids</b><small>Déficit calorique, protéines élevées pour garder le muscle</small></span></label>
+        <label><input type="radio" name="goal-type" value="maintain">
+          <span><b>⚖️ Maintenir</b><small>Manger autant que tu dépenses</small></span></label>
+        <label><input type="radio" name="goal-type" value="gain">
+          <span><b>💪 Prendre du muscle</b><small>Léger surplus et protéines pour construire</small></span></label>
+      </fieldset>
+
+      <div class="grid2">
+        <label class="field">Poids actuel
+          <span class="input-unit"><input id="goal-current" type="number" inputmode="decimal" step="0.1" min="20" max="400"> kg</span>
+        </label>
+        <label class="field when-target">Poids visé
+          <span class="input-unit"><input id="goal-target" type="number" inputmode="decimal" step="0.1" min="20" max="400"> kg</span>
+        </label>
+      </div>
+
+      <div class="when-target">
+        <label class="field">Horizon
+          <input id="goal-date" type="date">
+        </label>
+        <div class="chips">
+          <button type="button" class="chip" data-months="3">3 mois</button>
+          <button type="button" class="chip" data-months="6">6 mois</button>
+          <button type="button" class="chip" data-months="12">1 an</button>
+        </div>
+      </div>
+
+      <div id="goal-preview" class="plan-box"></div>
+      <p id="goal-error" class="error" hidden></p>
+      <button type="submit" class="primary wide">Enregistrer l'objectif</button>
+      <button id="goal-clear" type="button" class="link danger-link" hidden>Retirer l'objectif</button>
+    </form>
   </dialog>
 
   <dialog id="settings" class="sheet settings">
@@ -184,8 +228,23 @@
           <div class="card-label">💧 Eau</div>
           <div class="mid"><span id="water-total">0</span> <small>/ <span id="water-goal">2000</span> ml</small></div>
           <div class="bar"><div id="water-fill"></div></div>
+          <div id="water-sport" class="sub" hidden></div>
         </button>
       </div>
+      <div id="goal-card" class="card goal-card" hidden>
+        <div class="goal-head">
+          <span id="goal-title" class="card-label"></span>
+          <span id="goal-days" class="goal-days"></span>
+        </div>
+        <div id="goal-weights" class="goal-weights"></div>
+        <div class="bar"><div id="goal-fill"></div></div>
+        <div class="goal-foot">
+          <span id="goal-rate" class="sub"></span>
+          <button id="weigh-btn" type="button" class="weigh-btn">⚖️ Se peser</button>
+        </div>
+        <p id="goal-msg" class="hint" hidden></p>
+      </div>
+      <button id="goal-empty" type="button" class="card goal-empty" hidden>🎯 Définir un objectif (perte de poids, muscle…)</button>
       <p id="energy-warn" class="hint warn-text" hidden></p>
 
       <div id="projection" class="card projection" hidden>

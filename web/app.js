@@ -73,6 +73,8 @@ async function loadDay() {
   $("energy-warn").hidden = !warn;
   $("energy-warn").textContent = warn ? "⚠️ " + warn : "";
 
+  renderGoalCard();
+
   // ----- Protéines
   const pGoal = proteinGoal();
   $("protein-total").textContent = fmt(data.total_protein_g ?? 0);
@@ -80,9 +82,16 @@ async function loadDay() {
   $("protein-fill").style.width = Math.min(100, ((data.total_protein_g ?? 0) / pGoal) * 100) + "%";
 
   // ----- Eau
-  $("water-goal").textContent = fmt(water_goal);
+  // Sport : +500 ml par heure d'activité enregistrée (Strava/Garmin), arrondi à 50 ml
+  const sportMin = (energy?.activities || []).reduce((s, a) => s + (a.minutes || 0), 0);
+  const sportWater = Math.round((sportMin / 60) * 500 / 50) * 50;
+  const waterTarget = water_goal + sportWater;
+  $("water-goal").textContent = fmt(waterTarget);
+  $("water-goal").title = sportWater ? `${fmt(water_goal)} ml + ${fmt(sportWater)} ml pour ${sportMin} min de sport` : "";
+  $("water-sport").hidden = !sportWater;
+  $("water-sport").textContent = `dont +${fmt(sportWater)} ml sport`;
   $("water-total").textContent = fmt(data.total_water_ml);
-  $("water-fill").style.width = Math.min(100, (data.total_water_ml / water_goal) * 100) + "%";
+  $("water-fill").style.width = Math.min(100, (data.total_water_ml / waterTarget) * 100) + "%";
 
   // ----- Colonnes : repas à gauche, activités à droite (en mode dépense)
   const activities = energy ? energy.activities || [] : [];
@@ -339,6 +348,7 @@ $("water-gauge").onclick = () => editGoal("water_goal", "Objectif d'eau quotidie
 // Objectif de protéines : choisi, sinon 1,6 g par kg de poids, sinon 100 g
 const proteinGoal = () => me.protein_goal || (me.weight_kg ? Math.round(me.weight_kg * 1.6) : 100);
 $("protein-card").onclick = async () => {
+  if (plan) return openGoal(); // avec un objectif, les protéines en découlent
   const v = prompt("Objectif de protéines par jour (g)", proteinGoal());
   if (!v || !(Number(v) > 0)) return;
   try {
@@ -624,6 +634,10 @@ function openSettings() {
   const f = $("settings-form");
   (f.querySelector(`input[name=source][value=${me.energy_source}]`) || f.querySelector("input[name=source]")).checked = true;
   $("set-balance").value = me.balance_goal;
+  $("set-balance").disabled = !!plan; // fixé par l'objectif
+  $("set-balance").closest(".when-energy").querySelector(".hint").textContent = plan
+    ? `Calculé à partir de ton objectif (${plan.label.toLowerCase()}). Modifie l'objectif pour le changer.`
+    : "Mangé − brûlé. Négatif pour perdre (−500 ≈ −0,5 kg/semaine), 0 pour stabiliser.";
   $("set-sex").value = me.sex || "";
   $("set-birth").value = me.birth_year || "";
   $("set-height").value = me.height_cm || "";
@@ -641,9 +655,9 @@ async function saveSettings(close = true) {
   const num = (id) => ($(id).value === "" ? null : Number($(id).value));
   const body = {
     energy_source: sourceValue(),
-    balance_goal: num("set-balance") ?? me.balance_goal,
     life_factor: Number($("set-life").value),
   };
+  if (!plan) body.balance_goal = num("set-balance") ?? me.balance_goal;
   // n'envoie le profil que s'il est renseigné (les champs vides ne l'effacent pas)
   if ($("set-sex").value) body.sex = $("set-sex").value;
   for (const [id, key] of [["set-birth", "birth_year"], ["set-height", "height_cm"], ["set-weight", "weight_kg"]]) {
@@ -679,10 +693,153 @@ function handleOAuthReturn() {
   if (msg) setTimeout(() => alert(msg), 300);
 }
 
-function startApp() {
+// ---------- Objectif (perte de poids, maintien, muscle) ----------
+let plan = null; // plan calculé par le serveur à partir de l'objectif
+const fmtKg = (n) => Number(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+const fmtDate = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const goalType = () => ($("goal-form").querySelector("input[name=goal-type]:checked") || {}).value;
+
+async function refreshGoal() {
+  const res = await api("/api/goal");
+  plan = res.plan;
+  delete res.plan;
+  me = res;
+}
+
+function renderGoalCard() {
+  $("goal-card").hidden = !plan;
+  $("goal-empty").hidden = !!plan;
+  if (!plan) return;
+  $("goal-title").textContent = { lose: "📉 ", maintain: "⚖️ ", gain: "💪 " }[plan.type] + plan.label;
+  $("goal-days").textContent = plan.days_left != null ? `J−${plan.days_left}` : "";
+  const w = $("goal-weights");
+  w.textContent = "";
+  if (plan.current_weight && plan.target_weight) {
+    w.append(`${fmtKg(plan.current_weight)} → ${fmtKg(plan.target_weight)} kg`);
+    const s = document.createElement("small");
+    s.textContent = plan.target_date ? ` · d'ici le ${fmtDate(plan.target_date)}` : "";
+    w.append(s);
+  } else {
+    w.append(plan.current_weight ? `${fmtKg(plan.current_weight)} kg` : "Poids non renseigné");
+  }
+  $("goal-fill").parentElement.hidden = plan.progress == null;
+  $("goal-fill").style.width = Math.round((plan.progress || 0) * 100) + "%";
+  const rate = plan.weekly_change_kg ? `${plan.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(plan.weekly_change_kg))} kg/sem · ` : "";
+  $("goal-rate").textContent = `${rate}bilan ${signed(plan.balance_goal)} kcal/j · ${plan.protein_goal ?? "?"} g prot.`;
+  $("goal-msg").hidden = !plan.message;
+  $("goal-msg").textContent = plan.message || "";
+  $("goal-msg").classList.toggle("warn-text", !!plan.capped || /dépassé/.test(plan.message || ""));
+}
+
+function openGoal() {
+  if ($("account").open) $("account").close();
+  const f = $("goal-form");
+  const type = plan?.type || "lose";
+  f.querySelector(`input[name=goal-type][value=${type}]`).checked = true;
+  $("goal-current").value = plan?.current_weight ?? me.weight_kg ?? "";
+  $("goal-target").value = plan?.target_weight ?? "";
+  $("goal-date").value = plan?.target_date ?? "";
+  $("goal-date").min = shiftDay(todayISO(), 1);
+  $("goal-clear").hidden = !plan;
+  $("goal-error").hidden = true;
+  renderGoalForm();
+  $("goal-dialog").showModal();
+}
+
+function goalBody() {
+  const num = (id) => ($(id).value === "" ? null : Number($(id).value));
+  const body = { type: goalType(), current_weight: num("goal-current") };
+  if (body.type !== "maintain") {
+    body.target_weight = num("goal-target");
+    body.target_date = $("goal-date").value || null;
+  }
+  return body;
+}
+
+let previewTimer = null;
+function renderGoalForm() {
+  const maintain = goalType() === "maintain";
+  document.querySelectorAll("#goal-form .when-target").forEach((el) => (el.hidden = maintain));
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(previewGoal, 250);
+}
+
+async function previewGoal() {
+  const box = $("goal-preview");
+  const body = goalBody();
+  if (!body.current_weight) { box.textContent = "Indique ton poids actuel pour calculer le plan."; return; }
+  try {
+    const p = await api("/api/goal/preview", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    $("goal-error").hidden = true;
+    const rate = p.weekly_change_kg ? ` (${p.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(p.weekly_change_kg))} kg/semaine)` : "";
+    box.innerHTML = `Bilan visé : <b></b> par jour<span class="r"></span><br>Protéines : <b></b> par jour (${fmtKg(p.protein_per_kg)} g/kg)`;
+    const [bal, prot] = box.querySelectorAll("b");
+    bal.textContent = `${signed(p.balance_goal)} kcal`;
+    prot.textContent = `${p.protein_goal} g`;
+    box.querySelector(".r").textContent = rate;
+    if (body.type !== "maintain" && !(body.target_weight && body.target_date)) {
+      box.append(Object.assign(document.createElement("span"), {
+        className: "hint", textContent: " Sans poids visé ni horizon, on applique un rythme standard.",
+      }));
+    }
+    if (p.message) {
+      box.append(Object.assign(document.createElement("span"), { className: p.capped ? "warn-text" : "hint", textContent: p.message }));
+    }
+  } catch (err) {
+    box.textContent = "";
+    $("goal-error").textContent = err.message;
+    $("goal-error").hidden = false;
+  }
+}
+
+$("goal-form").addEventListener("input", renderGoalForm);
+document.querySelectorAll("#goal-form .chip").forEach((chip) => (chip.onclick = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + Number(chip.dataset.months));
+  $("goal-date").value = d.toISOString().slice(0, 10);
+  renderGoalForm();
+}));
+$("goal-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/goal", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(goalBody()) });
+    await refreshGoal();
+    $("goal-dialog").close();
+    loadDay();
+  } catch (err) {
+    $("goal-error").textContent = err.message;
+    $("goal-error").hidden = false;
+  }
+};
+$("goal-clear").onclick = async () => {
+  if (!confirm("Retirer ton objectif ? Les objectifs actuels de kcal et de protéines restent en place.")) return;
+  await api("/api/goal", { method: "DELETE" });
+  await refreshGoal();
+  $("goal-dialog").close();
+  loadDay();
+};
+$("goal-close").onclick = () => $("goal-dialog").close();
+$("open-goal").onclick = openGoal;
+$("goal-empty").onclick = openGoal;
+$("weigh-btn").onclick = async () => {
+  const v = prompt("Ton poids aujourd'hui (kg)", plan?.current_weight ?? me.weight_kg ?? "");
+  if (!v) return;
+  const kg = Number(String(v).replace(",", "."));
+  if (!(kg >= 20 && kg <= 400)) return alert("Poids invalide.");
+  try {
+    await api("/api/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kg }) });
+    await refreshGoal();
+    loadDay();
+  } catch (err) { alert(err.message); }
+};
+
+async function startApp() {
   handleOAuthReturn();
   $("account-btn").textContent = (me.name || "?").trim().charAt(0).toUpperCase();
   day = todayISO();
+  try { await refreshGoal(); } catch {} // sans objectif ou hors ligne : on continue
   loadDay().catch(showError);
 }
 function showError(err) {
