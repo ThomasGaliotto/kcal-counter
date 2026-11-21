@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kcal</title>
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kcal">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section id="auth" class="auth" hidden>
+    <div class="auth-box">
+      <div class="auth-logo"></div>
+      <h1>Kcal</h1>
+      <div class="tabs">
+        <button id="tab-login" class="tab active" type="button">Connexion</button>
+        <button id="tab-register" class="tab" type="button">Créer un compte</button>
+      </div>
+      <form id="auth-form">
+        <input id="auth-name" class="register-only" autocomplete="name" placeholder="Prénom" hidden>
+        <input id="auth-email" type="email" autocomplete="email" autocapitalize="off" placeholder="E-mail" required>
+        <input id="auth-password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="8" required>
+        <input id="auth-invite" class="register-only invite-only" autocapitalize="off" placeholder="Code d'invitation" hidden>
+        <p id="auth-error" class="error" hidden></p>
+        <button id="auth-submit" class="primary" type="submit">Se connecter</button>
+      </form>
+    </div>
+  </section>
+
+  <dialog id="account" class="sheet">
+    <div class="sheet-head">
+      <div><strong id="account-name"></strong><div id="account-email" class="muted"></div></div>
+      <button id="account-close" class="remove" aria-label="Fermer">×</button>
+    </div>
+    <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
+    <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
+    <button id="logout" class="sheet-btn danger">Se déconnecter</button>
+  </dialog>
+
+  <dialog id="settings" class="sheet settings">
+    <form id="settings-form" method="dialog">
+      <div class="sheet-head">
+        <strong>Dépense énergétique</strong>
+        <button id="settings-close" type="button" class="remove" aria-label="Fermer">×</button>
+      </div>
+
+      <h3 class="first">Connexions</h3>
+      <div class="conns">
+        <div class="conn" id="conn-strava">
+          <button type="button" class="conn-row">
+            <span class="conn-logo strava">S</span>
+            <span class="conn-name">Strava<small>Activités enregistrées</small></span>
+            <span class="conn-state"></span>
+          </button>
+          <div class="conn-panel" hidden></div>
+        </div>
+        <div class="conn" id="conn-garmin">
+          <button type="button" class="conn-row">
+            <span class="conn-logo garmin">G</span>
+            <span class="conn-name">Garmin<small>Dépense de la journée</small></span>
+            <span class="conn-state"></span>
+          </button>
+          <div class="conn-panel" hidden></div>
+        </div>
+      </div>
+
+      <h3>Calcul de la dépense</h3>
+      <fieldset class="choices">
+        <label><input type="radio" name="source" value="none">
+          <span><b>Aucune</b><small>Objectif fixe en kcal</small></span></label>
+        <label><input type="radio" name="source" value="strava">
+          <span><b>Strava</b><small>Métabolisme de base calculé + activités enregistrées</small></span></label>
+        <label><input type="radio" name="source" value="garmin">
+          <span><b>Garmin</b><small>Dépense de la journée mesurée par la montre</small></span></label>
+      </fieldset>
+      <p id="source-warning" class="hint warn-text" hidden></p>
+
+      <div class="when-energy">
+        <label class="field">Bilan visé par jour
+          <span class="input-unit"><input id="set-balance" type="number" inputmode="numeric" step="50" min="-2000" max="2000"> kcal</span>
+        </label>
+        <p class="hint">Mangé − brûlé. Négatif pour perdre (−500 ≈ −0,5 kg/semaine), 0 pour stabiliser.</p>
+      </div>
+
+      <div class="when-strava">
+        <h3>Ton profil</h3>
+        <div class="grid2">
+          <label class="field">Sexe
+            <select id="set-sex"><option value="">—</option><option value="m">Homme</option><option value="f">Femme</option></select>
+          </label>
+          <label class="field">Année de naissance
+            <input id="set-birth" type="number" inputmode="numeric" min="1900" max="2100">
+          </label>
+          <label class="field">Taille
+            <span class="input-unit"><input id="set-height" type="number" inputmode="decimal" min="50" max="260"> cm</span>
+          </label>
+          <label class="field">Poids
+            <span class="input-unit"><input id="set-weight" type="number" inputmode="decimal" step="0.1" min="20" max="400"> kg</span>
+          </label>
+        </div>
+        <label class="field">Vie quotidienne (hors sport)
+          <select id="set-life">
+            <option value="1">Métabolisme de base seul</option>
+            <option value="1.2">Sédentaire (bureau, peu de marche)</option>
+            <option value="1.375">Plutôt actif (debout, marche régulière)</option>
+            <option value="1.55">Très actif (métier physique)</option>
+          </select>
+        </label>
+        <p id="bmr-preview" class="hint"></p>
+      </div>
+
+      <p id="settings-error" class="error" hidden></p>
+      <button id="settings-save" type="submit" class="primary wide">Enregistrer</button>
+    </form>
+  </dialog>
+
+  <header class="day">
+    <button id="account-btn" class="account-btn" aria-label="Mon compte"></button>
+    <button id="prev" class="nav" aria-label="Jour précédent">‹</button>
+    <div id="day-label" class="day-label">Aujourd'hui</div>
+    <button id="next" class="nav" aria-label="Jour suivant">›</button>
+  </header>
+
+  <main>
+
+    <section id="review" hidden>
+      <img id="preview" alt="Photo du repas">
+      <div id="analyzing" class="analyzing">
+        <div class="spinner"></div>
+        <p>Analyse en cours…</p>
+      </div>
+      <div id="result" hidden>
+        <input id="meal-title" class="meal-title" aria-label="Nom du repas">
+        <div id="items"></div>
+        <div id="water-row" class="water-row" hidden>
+          <span>💧 Eau</span>
+          <label><input id="water-ml" type="number" inputmode="numeric" min="0" step="10"> ml</label>
+          <button id="remove-water" class="remove" aria-label="Retirer l'eau">×</button>
+        </div>
+        <div class="add-links">
+          <button id="add-item" class="link">+ Aliment</button>
+          <button id="add-water" class="link water-link">+ Eau</button>
+        </div>
+        <div class="result-total">Total : <strong id="result-kcal">0</strong> kcal</div>
+        <div class="actions">
+          <button id="cancel" class="secondary">Annuler</button>
+          <button id="save" class="primary">Enregistrer</button>
+        </div>
+      </div>
+      <p id="error" class="error" hidden></p>
+    </section>
+
+    <section class="summary">
+      <div id="cards" class="cards">
+        <div class="card" id="card-eaten">
+          <div class="card-label">Mangé</div>
+          <div class="big"><span id="total">0</span> <small>kcal</small></div>
+          <div class="bar"><div id="bar-fill"></div></div>
+          <button id="goal-btn" class="sub link-like">sur <span id="goal">2000</span> visés</button>
+        </div>
+        <div class="card" id="card-burned" hidden>
+          <div class="card-label">Brûlé</div>
+          <div class="big"><span id="burned">0</span> <small>kcal</small></div>
+          <div class="mini-label">Métabolisme</div>
+          <div class="bar metab"><div id="metab-fill"></div></div>
+          <div id="metab-text" class="sub"></div>
+          <div class="sub">Activités : <b id="act-total">0</b> kcal</div>
+        </div>
+      </div>
+      <p id="energy-warn" class="hint warn-text" hidden></p>
+
+      <div id="projection" class="card projection" hidden>
+        <div class="card-label">Projection à minuit</div>
+        <div class="proj-row"><span>Brûlé prévu</span><b id="proj-burned"></b></div>
+        <div class="proj-row"><span>Bilan si tu ne manges plus</span><b id="proj-balance"></b></div>
+        <div class="proj-row"><span id="proj-left-label">Encore possible</span><b id="proj-left"></b></div>
+      </div>
+    </section>
+
+    <div id="columns" class="columns">
+      <section class="col">
+        <h2 class="col-title" id="meals-title" hidden>Repas</h2>
+        <div id="meals"></div>
+        <p id="empty" class="empty" hidden>Aucun repas ce jour-là.</p>
+      </section>
+      <section class="col" id="activities-col" hidden>
+        <h2 class="col-title">Activités</h2>
+        <div id="activities"></div>
+        <p id="no-activity" class="empty small" hidden>Aucune activité.</p>
+      </section>
+    </div>
+
+    <button id="water-gauge" class="card water-card" type="button" aria-label="Eau bue, toucher pour changer l'objectif">
+      <span class="drop">💧</span>
+      <div class="bar water"><div id="water-fill"></div></div>
+      <span class="water-text"><span id="water-total">0</span> / <span id="water-goal">2000</span> ml</span>
+    </button>
+  </main>
+
+  <div class="fab-bar">
+    <label class="fab" aria-label="Prendre une photo">
+      <input id="photo" class="photo-input" type="file" accept="image/*" capture="environment" hidden>
+      <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </label>
+    <label class="fab-small" aria-label="Choisir dans la galerie">
+      <input id="gallery" class="photo-input" type="file" accept="image/*" hidden>
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+    </label>
+  </div>
+
+  <template id="item-tpl">
+    <div class="item">
+      <input class="name" aria-label="Aliment">
+      <button class="remove" aria-label="Retirer">×</button>
+      <label>g <input class="grams" type="number" inputmode="decimal" min="0"></label>
+      <label>kcal/100g <input class="k100" type="number" inputmode="decimal" min="0"></label>
+      <span class="kcal"></span>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
