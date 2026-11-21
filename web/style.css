@@ -175,12 +175,12 @@ button { cursor: pointer; }
 .meal.activity { background: transparent; border: 1px dashed var(--line); }
 .act-kcal { color: #fb923c; font-weight: 600; margin-top: 2px; }
 
-/* ---------- Eau ---------- */
-.water-card {
-  display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px;
-  border: 0; text-align: left; cursor: pointer;
-}
-.water-card .bar { flex: 1; margin: 0; }
+/* ---------- Protéines / eau ---------- */
+.minis { margin-top: 10px; }
+.mini-card { border: 0; text-align: left; cursor: pointer; padding: 12px 14px; width: 100%; }
+.mid { font-size: 22px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.mid small { font-size: 13px; font-weight: 400; color: var(--muted); }
+#protein-fill { height: 100%; width: 0; background: #c084fc; transition: width .3s; }
 
 main { padding: 16px; max-width: 560px; margin: 0 auto; }
 

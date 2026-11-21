@@ -68,6 +68,17 @@ uv venv && uv pip install -r pyproject.toml
 Variables optionnelles : `KCAL_INVITE_CODE` (code exigé à l'inscription), `OLLAMA_URL` (défaut `http://localhost:11434`),
 `OLLAMA_MODEL` (défaut `qwen3.5:9b`), `KCAL_DB`.
 
+### En service permanent (démarre avec le PC)
+
+Service systemd utilisateur : `~/.config/systemd/user/kcal.service`
+(avec `loginctl enable-linger $USER`, il démarre au boot même sans session ouverte).
+
+```bash
+systemctl --user status kcal      # état
+systemctl --user restart kcal     # après une mise à jour du code ou du .env
+journalctl --user -u kcal -f      # journaux
+```
+
 ## Sur l'iPhone
 
 **À la maison (même Wi-Fi)** : ouvre `http://<IP-du-PC>:8420` dans Safari.

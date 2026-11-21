@@ -43,7 +43,7 @@ def _token_hash(token: str) -> str:
 
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
-    "sex", "birth_year", "height_cm", "weight_kg", "life_factor",
+    "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
 )
 
 
@@ -117,6 +117,7 @@ class Profile(BaseModel):
     height_cm: float | None = Field(None, ge=50, le=260)
     weight_kg: float | None = Field(None, ge=20, le=400)
     life_factor: float | None = Field(None, ge=1.0, le=2.0)
+    protein_goal: int | None = Field(None, gt=0, le=500)
 
 
 class PasswordChange(BaseModel):

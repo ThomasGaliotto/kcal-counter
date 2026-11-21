@@ -160,6 +160,9 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
         "day": day.isoformat(),
         "total_kcal": round(sum(m["kcal"] for m in meals)),
         "total_water_ml": round(sum(m["water_ml"] for m in meals)),
+        "total_protein_g": round(sum(
+            i.get("grams", 0) * (i.get("protein_100g") or 0) / 100 for m in meals for i in m["items"]
+        )),
         "meals": meals,
     }
 

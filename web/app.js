@@ -73,6 +73,12 @@ async function loadDay() {
   $("energy-warn").hidden = !warn;
   $("energy-warn").textContent = warn ? "⚠️ " + warn : "";
 
+  // ----- Protéines
+  const pGoal = proteinGoal();
+  $("protein-total").textContent = fmt(data.total_protein_g ?? 0);
+  $("protein-goal").textContent = fmt(pGoal);
+  $("protein-fill").style.width = Math.min(100, ((data.total_protein_g ?? 0) / pGoal) * 100) + "%";
+
   // ----- Eau
   $("water-goal").textContent = fmt(water_goal);
   $("water-total").textContent = fmt(data.total_water_ml);
@@ -330,6 +336,19 @@ $("goal-btn").onclick = () => {
   else openSettings();
 };
 $("water-gauge").onclick = () => editGoal("water_goal", "Objectif d'eau quotidien (ml)");
+// Objectif de protéines : choisi, sinon 1,6 g par kg de poids, sinon 100 g
+const proteinGoal = () => me.protein_goal || (me.weight_kg ? Math.round(me.weight_kg * 1.6) : 100);
+$("protein-card").onclick = async () => {
+  const v = prompt("Objectif de protéines par jour (g)", proteinGoal());
+  if (!v || !(Number(v) > 0)) return;
+  try {
+    me = await api("/api/me", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ protein_goal: Math.round(Number(v)) }),
+    });
+    loadDay();
+  } catch (err) { alert(err.message); }
+};
 
 // ---------- Comptes ----------
 let authMode = "login";

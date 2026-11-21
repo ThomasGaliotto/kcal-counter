@@ -31,6 +31,7 @@ USER_COLUMNS = {
     "height_cm": "REAL",
     "weight_kg": "REAL",
     "life_factor": "REAL NOT NULL DEFAULT 1.2",        # vie quotidienne hors sport
+    "protein_goal": "INTEGER",                         # g/jour ; vide = 1,6 g/kg (ou 100 g)
     "strava_athlete": "TEXT",
     "strava_access": "TEXT",
     "strava_refresh": "TEXT",

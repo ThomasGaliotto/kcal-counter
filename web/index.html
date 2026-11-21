@@ -174,6 +174,18 @@
           <div class="sub">Activités : <b id="act-total">0</b> kcal</div>
         </div>
       </div>
+      <div class="cards two minis">
+        <button id="protein-card" class="card mini-card" type="button" aria-label="Protéines, toucher pour changer l'objectif">
+          <div class="card-label">💪 Protéines</div>
+          <div class="mid"><span id="protein-total">0</span> <small>/ <span id="protein-goal">100</span> g</small></div>
+          <div class="bar"><div id="protein-fill"></div></div>
+        </button>
+        <button id="water-gauge" class="card mini-card" type="button" aria-label="Eau, toucher pour changer l'objectif">
+          <div class="card-label">💧 Eau</div>
+          <div class="mid"><span id="water-total">0</span> <small>/ <span id="water-goal">2000</span> ml</small></div>
+          <div class="bar"><div id="water-fill"></div></div>
+        </button>
+      </div>
       <p id="energy-warn" class="hint warn-text" hidden></p>
 
       <div id="projection" class="card projection" hidden>
@@ -196,12 +208,6 @@
         <p id="no-activity" class="empty small" hidden>Aucune activité.</p>
       </section>
     </div>
-
-    <button id="water-gauge" class="card water-card" type="button" aria-label="Eau bue, toucher pour changer l'objectif">
-      <span class="drop">💧</span>
-      <div class="bar water"><div id="water-fill"></div></div>
-      <span class="water-text"><span id="water-total">0</span> / <span id="water-goal">2000</span> ml</span>
-    </button>
   </main>
 
   <div class="fab-bar">
