@@ -31,8 +31,8 @@ button { cursor: pointer; }
 }
 .auth-box { width: 100%; max-width: 360px; text-align: center; }
 .auth-logo {
-  width: 64px; height: 64px; margin: 0 auto 8px; border-radius: 50%;
-  border: 14px solid var(--accent);
+  display: block; width: 88px; height: 88px; margin: 0 auto 10px; border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(251, 146, 60, .18);
 }
 .auth h1 { margin: 0 0 24px; font-size: 28px; }
 .tabs { display: flex; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 16px; }
