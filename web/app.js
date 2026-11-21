@@ -328,36 +328,99 @@ $("save").onclick = async () => {
 // ---------- Navigation ----------
 $("prev").onclick = () => { day = shiftDay(day, -1); loadDay(); };
 $("next").onclick = () => { if (day < todayISO()) { day = shiftDay(day, 1); loadDay(); } };
-async function editGoal(field, label) {
-  const v = prompt(label, me[field]);
-  if (!v || !(Number(v) > 0)) return;
-  try {
-    me = await api("/api/me", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field]: Math.round(Number(v)) }),
-    });
-    loadDay();
-  } catch (err) { alert(err.message); }
+/* Fenêtre de saisie dans l'app (prompt() n'existe pas dans tous les navigateurs intégrés).
+   fields : [{ key, label, type ("number" | "password" | "text"), value, unit, step, min, max }]
+   onSubmit(values) : async ; lever une erreur laisse la fenêtre ouverte avec le message. */
+function ask({ title, fields, submit = "Valider", onSubmit }) {
+  const dlg = $("ask");
+  $("ask-title").textContent = title;
+  $("ask-submit").textContent = submit;
+  $("ask-error").hidden = true;
+  const box = $("ask-fields");
+  box.innerHTML = "";
+  const inputs = {};
+  for (const f of fields) {
+    const label = document.createElement("label");
+    label.className = "field";
+    label.textContent = f.label;
+    const input = document.createElement("input");
+    input.type = f.type === "number" ? "text" : f.type || "text";
+    if (f.type === "number") input.inputMode = f.step && f.step < 1 ? "decimal" : "numeric";
+    if (f.type === "password") input.autocomplete = f.key === "current" ? "current-password" : "new-password";
+    input.value = f.value ?? "";
+    input.required = true;
+    inputs[f.key] = input;
+    if (f.unit) {
+      const wrap = document.createElement("span");
+      wrap.className = "input-unit";
+      wrap.append(input, " " + f.unit);
+      label.append(wrap);
+    } else {
+      label.append(input);
+    }
+    box.append(label);
+  }
+  $("ask-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const values = {};
+    for (const f of fields) {
+      const raw = inputs[f.key].value.trim();
+      if (f.type === "number") {
+        const n = Number(raw.replace(",", "."));
+        if (raw === "" || !Number.isFinite(n) || (f.min != null && n < f.min) || (f.max != null && n > f.max)) {
+          return showAskError(`${f.label} : valeur entre ${f.min ?? "…"} et ${f.max ?? "…"}${f.unit ? " " + f.unit : ""}.`);
+        }
+        values[f.key] = n;
+      } else {
+        values[f.key] = raw;
+      }
+    }
+    $("ask-submit").disabled = true;
+    try {
+      await onSubmit(values);
+      dlg.close();
+    } catch (err) {
+      showAskError(err.message);
+    } finally {
+      $("ask-submit").disabled = false;
+    }
+  };
+  $("ask-close").onclick = () => dlg.close();
+  dlg.showModal();
+  const first = inputs[fields[0].key];
+  first.focus();
+  first.select();
+}
+function showAskError(msg) {
+  $("ask-error").textContent = msg;
+  $("ask-error").hidden = false;
+}
+
+async function patchMe(changes) {
+  me = await api("/api/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(changes) });
+  loadDay();
+}
+function editGoal(field, label, unit, max) {
+  ask({
+    title: label,
+    fields: [{ key: "v", label: "Objectif par jour", type: "number", value: me[field], unit, min: 1, max }],
+    onSubmit: ({ v }) => patchMe({ [field]: Math.round(v) }),
+  });
 }
 $("goal-btn").onclick = () => {
-  if (me.energy_source === "none") editGoal("kcal_goal", "Objectif quotidien (kcal)");
+  if (me.energy_source === "none") editGoal("kcal_goal", "🔥 Objectif de calories", "kcal", 20000);
   else openSettings();
 };
-$("water-gauge").onclick = () => editGoal("water_goal", "Objectif d'eau quotidien (ml)");
+$("water-gauge").onclick = () => editGoal("water_goal", "💧 Objectif d'eau", "ml", 20000);
 // Objectif de protéines : choisi, sinon 1,6 g par kg de poids, sinon 100 g
 const proteinGoal = () => me.protein_goal || (me.weight_kg ? Math.round(me.weight_kg * 1.6) : 100);
 $("protein-card").onclick = async () => {
   if (plan) return openGoal(); // avec un objectif, les protéines en découlent
-  const v = prompt("Objectif de protéines par jour (g)", proteinGoal());
-  if (!v || !(Number(v) > 0)) return;
-  try {
-    me = await api("/api/me", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ protein_goal: Math.round(Number(v)) }),
-    });
-    loadDay();
-  } catch (err) { alert(err.message); }
+  ask({
+    title: "💪 Objectif de protéines",
+    fields: [{ key: "v", label: "Objectif par jour", type: "number", value: proteinGoal(), unit: "g", min: 1, max: 500 }],
+    onSubmit: ({ v }) => patchMe({ protein_goal: Math.round(v) }),
+  });
 };
 
 // ---------- Comptes ----------
@@ -428,20 +491,25 @@ $("logout").onclick = async () => {
   $("meals").innerHTML = "";
   showAuth();
 };
-$("change-password").onclick = async () => {
-  const current = prompt("Mot de passe actuel");
-  if (!current) return;
-  const next = prompt("Nouveau mot de passe (8 caractères minimum)");
-  if (!next) return;
-  if (next.length < 8) return alert("8 caractères minimum.");
-  try {
-    await api("/api/me/password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ current, new: next }),
-    });
-    alert("Mot de passe changé. Tes autres appareils ont été déconnectés.");
-  } catch (err) { alert(err.message); }
+$("change-password").onclick = () => {
+  $("account").close();
+  ask({
+    title: "Changer le mot de passe",
+    submit: "Changer",
+    fields: [
+      { key: "current", label: "Mot de passe actuel", type: "password" },
+      { key: "next", label: "Nouveau mot de passe (8 caractères minimum)", type: "password" },
+    ],
+    onSubmit: async ({ current, next }) => {
+      if (next.length < 8) throw new Error("Le nouveau mot de passe doit faire au moins 8 caractères.");
+      await api("/api/me/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current, new: next }),
+      });
+      setTimeout(() => alert("Mot de passe changé. Tes autres appareils ont été déconnectés."), 100);
+    },
+  });
 };
 
 // ---------- Réglages : dépense énergétique ----------
@@ -823,16 +891,18 @@ $("goal-clear").onclick = async () => {
 $("goal-close").onclick = () => $("goal-dialog").close();
 $("open-goal").onclick = openGoal;
 $("goal-empty").onclick = openGoal;
-$("weigh-btn").onclick = async () => {
-  const v = prompt("Ton poids aujourd'hui (kg)", plan?.current_weight ?? me.weight_kg ?? "");
-  if (!v) return;
-  const kg = Number(String(v).replace(",", "."));
-  if (!(kg >= 20 && kg <= 400)) return alert("Poids invalide.");
-  try {
-    await api("/api/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kg }) });
-    await refreshGoal();
-    loadDay();
-  } catch (err) { alert(err.message); }
+$("weigh-btn").onclick = () => {
+  ask({
+    title: "⚖️ Pesée du jour",
+    submit: "Enregistrer",
+    fields: [{ key: "kg", label: "Ton poids aujourd'hui", type: "number", step: 0.1,
+      value: plan?.current_weight ?? me.weight_kg ?? "", unit: "kg", min: 20, max: 400 }],
+    onSubmit: async ({ kg }) => {
+      await api("/api/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kg }) });
+      await refreshGoal();
+      loadDay();
+    },
+  });
 };
 
 async function startApp() {

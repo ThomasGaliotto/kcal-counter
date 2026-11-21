@@ -45,6 +45,19 @@
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
   </dialog>
 
+  <!-- Petite fenêtre de saisie générique (remplace prompt(), non géré partout) -->
+  <dialog id="ask" class="sheet ask">
+    <form id="ask-form" method="dialog">
+      <div class="sheet-head">
+        <strong id="ask-title"></strong>
+        <button id="ask-close" type="button" class="remove" aria-label="Fermer">×</button>
+      </div>
+      <div id="ask-fields"></div>
+      <p id="ask-error" class="error" hidden></p>
+      <button id="ask-submit" type="submit" class="primary wide">Valider</button>
+    </form>
+  </dialog>
+
   <dialog id="goal-dialog" class="sheet settings">
     <form id="goal-form" method="dialog">
       <div class="sheet-head">

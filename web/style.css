@@ -180,6 +180,10 @@ button { cursor: pointer; }
 .mini-card { border: 0; text-align: left; cursor: pointer; padding: 12px 14px; width: 100%; }
 .mid { font-size: 22px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
 .mid small { font-size: 13px; font-weight: 400; color: var(--muted); }
+/* ---------- Fenêtre de saisie ---------- */
+.ask .field input { font-size: 22px; font-weight: 600; }
+.ask .primary.wide { margin-top: 16px; }
+
 /* ---------- Objectif ---------- */
 .goal-card, .goal-empty { margin-top: 10px; }
 .goal-empty {
