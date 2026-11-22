@@ -161,7 +161,7 @@ async function loadDay() {
     }
     el.querySelector(".edit").onclick = () => editMeal(m);
     el.querySelector(".remove").onclick = async () => {
-      if (!confirm(`Supprimer « ${m.title} » ?`)) return;
+      if (!(await confirmBox(`Supprimer « ${m.title} » ?`, { title: "Supprimer le repas" }))) return;
       await api(`/api/meals/${m.id}`, { method: "DELETE" });
       loadDay();
     };
@@ -357,7 +357,7 @@ $("cancel").onclick = closeReview;
 $("save").onclick = async () => {
   const items = draft.items.filter((it) => it.name.trim());
   const water_ml = draft.water_ml || 0;
-  if (!items.length && !water_ml) return alert("Ajoute au moins un aliment ou de l'eau.");
+  if (!items.length && !water_ml) return notice("Ajoute au moins un aliment ou de l'eau.");
   $("save").disabled = true;
   try {
     // Le repas est rangé dans le jour affiché (pratique pour rattraper un oubli d'hier)
@@ -369,7 +369,7 @@ $("save").onclick = async () => {
     });
     closeReview();
   } catch (err) {
-    alert(err.message);
+    notice(err.message, "Erreur");
   } finally {
     $("save").disabled = false;
   }
@@ -482,6 +482,22 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
   dlg.showModal();
   const first = Object.values(ui).find((u) => u.input && !u.label.hidden)?.input;
   if (first) { first.focus(); first.select(); }
+}
+// confirm() et alert() ne s'affichent pas dans tous les navigateurs intégrés : versions dans l'app
+function confirmBox(message, { title = "Confirmer", ok = "Supprimer", danger = true } = {}) {
+  return new Promise((resolve) => {
+    let done = false;
+    ask({ title, submit: ok, fields: [{ key: "msg", type: "note", label: message }],
+          onSubmit: () => { done = true; resolve(true); } });
+    $("ask-submit").classList.toggle("danger", danger);
+    $("ask").addEventListener("close", () => {
+      $("ask-submit").classList.remove("danger");
+      if (!done) resolve(false);
+    }, { once: true });
+  });
+}
+function notice(message, title = "Kcal") {
+  ask({ title, submit: "OK", fields: [{ key: "msg", type: "note", label: message }], onSubmit: () => {} });
 }
 const fmtNum = (n) => (n == null ? null : String(n).replace(".", ","));
 function showAskError(msg) {
@@ -651,7 +667,7 @@ $("change-password").onclick = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ current, new: next }),
       });
-      setTimeout(() => alert("Mot de passe changé. Tes autres appareils ont été déconnectés."), 100);
+      setTimeout(() => notice("Mot de passe changé. Tes autres appareils ont été déconnectés."), 100);
     },
   });
 };
@@ -724,7 +740,7 @@ function disconnectPanel(panel, label, url) {
   panel.innerHTML = `<p>${label} est connecté à ton compte Kcal.</p>
     <button type="button" class="btn danger">Déconnecter ${label}</button>`;
   panel.querySelector("button").onclick = async () => {
-    if (!confirm(`Déconnecter ${label} ?`)) return;
+    if (!(await confirmBox(`Déconnecter ${label} ?`, { title: "Déconnexion", ok: "Déconnecter" }))) return;
     try {
       await api(url, { method: "POST" });
       me = await api("/api/me");
@@ -902,7 +918,7 @@ function handleOAuthReturn() {
     expired: "La demande a expiré, réessaie depuis les réglages.",
     error: "Strava a refusé la connexion. Vérifie la configuration (voir le README).",
   }[status];
-  if (msg) setTimeout(() => alert(msg), 300);
+  if (msg) setTimeout(() => notice(msg, "Strava"), 300);
 }
 
 // ---------- Objectif (perte de poids, maintien, muscle) ----------
@@ -1026,7 +1042,7 @@ $("goal-form").onsubmit = async (e) => {
   }
 };
 $("goal-clear").onclick = async () => {
-  if (!confirm("Retirer ton objectif ? Les objectifs actuels de kcal et de protéines restent en place.")) return;
+  if (!(await confirmBox("Les objectifs actuels de kcal et de protéines restent en place.", { title: "Retirer ton objectif ?", ok: "Retirer" }))) return;
   await api("/api/goal", { method: "DELETE" });
   await refreshGoal();
   $("goal-dialog").close();
@@ -1250,7 +1266,7 @@ function renderWeightList() {
     }
     row.children[2].textContent = `${fmtKg(w.kg)} kg`;
     row.querySelector("button").onclick = async () => {
-      if (!confirm(`Supprimer la pesée du ${row.children[0].textContent} (${fmtKg(w.kg)} kg) ?`)) return;
+      if (!(await confirmBox(`Supprimer la pesée du ${row.children[0].textContent} (${fmtKg(w.kg)} kg) ?`, { title: "Supprimer la pesée" }))) return;
       await api(`/api/weights/${w.day}`, { method: "DELETE" });
       await afterWeightChange();
     };

@@ -350,3 +350,6 @@ body.reviewing .fab-bar { display: none; }
 }
 .add-text:hover, .add-text:focus-visible { border-color: var(--accent); color: var(--text); }
 body.reviewing .add-text { display: none; }
+
+/* bouton de confirmation d'une suppression */
+#ask-submit.danger { background: var(--danger); color: #2a0707; }
