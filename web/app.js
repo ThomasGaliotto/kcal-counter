@@ -899,11 +899,230 @@ $("weigh-btn").onclick = () => {
       value: plan?.current_weight ?? me.weight_kg ?? "", unit: "kg", min: 20, max: 400 }],
     onSubmit: async ({ kg }) => {
       await api("/api/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kg }) });
-      await refreshGoal();
-      loadDay();
+      await afterWeightChange();
     },
   });
 };
+
+async function afterWeightChange() {
+  await refreshGoal();
+  loadDay();
+  if ($("weights-dialog").open) renderWeights();
+}
+
+// ---------- Évolution du poids ----------
+let weightRange = "90";
+let weightsCache = [];
+const SVG_NS = "http://www.w3.org/2000/svg";
+const DAY_MS = 86400000;
+const toTime = (iso) => new Date(iso + "T12:00:00").getTime();
+const shortDate = (t) => new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (parent) parent.append(el);
+  return el;
+}
+
+// Trajectoire prévue par l'objectif : du poids de départ au poids visé, au rythme du plan
+function goalLine() {
+  if (!plan || !plan.start_weight || !plan.target_weight || !plan.start_date) return null;
+  const end = plan.eta_date || plan.target_date;
+  if (!end) return null;
+  return { t0: toTime(plan.start_date), w0: plan.start_weight, t1: toTime(end), w1: plan.target_weight };
+}
+const goalAt = (g, t) => g.w0 + (g.w1 - g.w0) * Math.min(1, Math.max(0, (t - g.t0) / (g.t1 - g.t0)));
+
+async function openWeights() {
+  if ($("account").open) $("account").close();
+  $("weights-dialog").showModal();
+  await renderWeights();
+}
+
+async function renderWeights() {
+  weightsCache = await api("/api/weights?days=3650");
+  document.querySelectorAll(".range-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.range === weightRange));
+  renderWeightStats();
+  drawWeightChart();
+  renderWeightList();
+}
+
+function renderWeightStats() {
+  const box = $("weight-stats");
+  box.innerHTML = "";
+  if (!weightsCache.length) return;
+  const first = plan?.start_weight ?? weightsCache[0].kg;
+  const last = weightsCache[weightsCache.length - 1].kg;
+  const delta = last - first;
+  const cells = [["Départ", `${fmtKg(first)} kg`], ["Actuel", `${fmtKg(last)} kg`],
+    ["Variation", `${delta > 0 ? "+" : delta < 0 ? "−" : ""}${fmtKg(Math.abs(delta))} kg`]];
+  for (const [label, value] of cells) {
+    const d = document.createElement("div");
+    d.innerHTML = "<small></small><b></b>";
+    d.querySelector("small").textContent = label;
+    d.querySelector("b").textContent = value;
+    box.append(d);
+  }
+  const g = goalLine();
+  if (g) {
+    const expected = goalAt(g, toTime(weightsCache[weightsCache.length - 1].day));
+    const ahead = plan.type === "gain" ? last - expected : expected - last; // > 0 : en avance
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = Math.abs(ahead) < 0.15 ? "Pile dans le rythme de ton objectif."
+      : ahead > 0 ? `En avance de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif 👍`
+      : `En retard de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif.`;
+    box.append(note);
+  }
+}
+
+function niceStep(span) {
+  for (const s of [0.5, 1, 2, 5, 10, 20]) if (span / s <= 5) return s;
+  return 50;
+}
+
+function drawWeightChart() {
+  const svg = $("weight-chart");
+  svg.innerHTML = "";
+  $("chart-tip").hidden = true;
+  const W = svg.clientWidth || 340, H = 220;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pad = { l: 34, r: 14, t: 14, b: 24 };
+  const g = goalLine();
+  const today = toTime(todayISO());
+
+  // Période affichée ; « Tout » va jusqu'à l'échéance de l'objectif
+  let t0 = weightRange === "all"
+    ? Math.min(...weightsCache.map((w) => toTime(w.day)), g ? g.t0 : today)
+    : today - Number(weightRange) * DAY_MS;
+  let t1 = weightRange === "all" && g ? Math.max(today, g.t1) : today;
+  if (t1 - t0 < 7 * DAY_MS) t0 = t1 - 7 * DAY_MS;
+  const pts = weightsCache.map((w) => ({ t: toTime(w.day), kg: w.kg, day: w.day })).filter((p) => p.t >= t0 && p.t <= t1);
+
+  if (!pts.length && !g) {
+    svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "empty" }, svg).textContent =
+      weightsCache.length ? "Aucune pesée sur cette période" : "Pas encore de pesée : ajoute la première ci-dessous.";
+    $("chart-key").innerHTML = "";
+    return;
+  }
+
+  // Échelle verticale : pesées + trajectoire de l'objectif sur la période
+  const ys = pts.map((p) => p.kg);
+  if (g) ys.push(goalAt(g, Math.max(t0, g.t0)), goalAt(g, Math.min(t1, g.t1)));
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (hi - lo < 2) { const m = (hi + lo) / 2; lo = m - 1; hi = m + 1; }
+  const step = niceStep(hi - lo);
+  lo = Math.floor((lo - step * 0.3) / step) * step;
+  hi = Math.ceil((hi + step * 0.3) / step) * step;
+  const x = (t) => pad.l + ((t - t0) / (t1 - t0)) * (W - pad.l - pad.r);
+  const y = (kg) => pad.t + ((hi - kg) / (hi - lo)) * (H - pad.t - pad.b);
+
+  // Grille et axes, discrets
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    svgEl("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: "grid" }, svg);
+    svgEl("text", { x: pad.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmtKg(v);
+  }
+  const nTicks = W < 360 ? 3 : 4;
+  for (let i = 0; i < nTicks; i++) {
+    const t = t0 + (i / (nTicks - 1)) * (t1 - t0);
+    svgEl("text", { x: x(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" }, svg)
+      .textContent = shortDate(t);
+  }
+
+  // Trajectoire de l'objectif (pointillés) + point d'arrivée
+  if (g) {
+    const a = Math.max(t0, g.t0), b = Math.min(t1, g.t1);
+    if (b > a) {
+      svgEl("line", { x1: x(a), y1: y(goalAt(g, a)), x2: x(b), y2: y(goalAt(g, b)), class: "ref" }, svg);
+    }
+    if (g.t1 <= t1 && g.t1 >= t0) {
+      svgEl("circle", { cx: x(g.t1), cy: y(g.w1), r: 4, class: "ref-dot" }, svg);
+      svgEl("text", { x: x(g.t1) - 6, y: y(g.w1) - 9, "text-anchor": "end" }, svg).textContent = `${fmtKg(g.w1)} kg`;
+    }
+  }
+
+  // Courbe des pesées
+  if (pts.length > 1) {
+    svgEl("polyline", { points: pts.map((p) => `${x(p.t)},${y(p.kg)}`).join(" "), class: "line" }, svg);
+  }
+  for (const p of pts) svgEl("circle", { cx: x(p.t), cy: y(p.kg), r: 4, class: "dot" }, svg);
+  if (pts.length) { // étiquette directe sur la dernière valeur seulement, du côté opposé à l'objectif
+    const p = pts[pts.length - 1];
+    const below = g && p.t >= g.t0 && goalAt(g, p.t) > p.kg && y(p.kg) + 20 < H - pad.b;
+    svgEl("text", { x: x(p.t) - (x(p.t) > W - 50 ? 6 : 0), y: below ? y(p.kg) + 18 : y(p.kg) - 10,
+      "text-anchor": x(p.t) > W - 50 ? "end" : "middle" }, svg).textContent = `${fmtKg(p.kg)} kg`;
+  }
+
+  // Légende (deux tracés : la courbe et l'objectif)
+  $("chart-key").innerHTML = g ? `<span>Poids</span><span class="ref">Objectif (${plan.label.toLowerCase()})</span>` : "";
+
+  // Survol / toucher : repère vertical + info-bulle sur la pesée la plus proche
+  const cross = svgEl("line", { y1: pad.t, y2: H - pad.b, class: "cross", visibility: "hidden" }, svg);
+  const hit = svgEl("rect", { x: pad.l, y: 0, width: W - pad.l - pad.r, height: H, class: "hit" }, svg);
+  const tip = $("chart-tip");
+  const show = (e) => {
+    if (!pts.length) return;
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    const p = pts.reduce((best, q) => (Math.abs(x(q.t) - mx) < Math.abs(x(best.t) - mx) ? q : best));
+    cross.setAttribute("x1", x(p.t)); cross.setAttribute("x2", x(p.t));
+    cross.setAttribute("visibility", "visible");
+    tip.innerHTML = "<small></small><b></b>";
+    tip.querySelector("small").textContent = new Date(p.t).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
+    tip.querySelector("b").textContent = `${fmtKg(p.kg)} kg`;
+    if (g && p.t >= g.t0) {
+      const s = document.createElement("small");
+      s.textContent = `objectif ce jour-là : ${fmtKg(goalAt(g, p.t))} kg`;
+      tip.append(s);
+    }
+    tip.hidden = false;
+    const px = (x(p.t) / W) * rect.width;
+    tip.style.left = Math.min(Math.max(px - tip.offsetWidth / 2, 4), rect.width - tip.offsetWidth - 4) + "px";
+  };
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerdown", show);
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; });
+}
+
+// Tableau des pesées (vue accessible du graphique), la plus récente en premier
+function renderWeightList() {
+  const box = $("weight-list");
+  box.innerHTML = "";
+  if (!weightsCache.length) {
+    box.innerHTML = `<p class="hint">Aucune pesée pour l'instant.</p>`;
+    return;
+  }
+  const rows = weightsCache.slice().reverse();
+  rows.forEach((w, i) => {
+    const prev = rows[i + 1];
+    const row = document.createElement("div");
+    row.className = "weight-row";
+    row.innerHTML = `<span></span><span class="delta"></span><b></b><button type="button" aria-label="Supprimer cette pesée">×</button>`;
+    row.children[0].textContent = new Date(toTime(w.day)).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+    if (prev) {
+      const d = w.kg - prev.kg;
+      row.children[1].textContent = d ? `${d > 0 ? "+" : "−"}${fmtKg(Math.abs(d))}` : "=";
+    }
+    row.children[2].textContent = `${fmtKg(w.kg)} kg`;
+    row.querySelector("button").onclick = async () => {
+      if (!confirm(`Supprimer la pesée du ${row.children[0].textContent} (${fmtKg(w.kg)} kg) ?`)) return;
+      await api(`/api/weights/${w.day}`, { method: "DELETE" });
+      await afterWeightChange();
+    };
+    box.append(row);
+  });
+}
+
+document.querySelectorAll(".range-chips .chip").forEach((chip) => (chip.onclick = () => {
+  weightRange = chip.dataset.range;
+  document.querySelectorAll(".range-chips .chip").forEach((c) => c.classList.toggle("active", c === chip));
+  drawWeightChart();
+}));
+$("weights-close").onclick = () => $("weights-dialog").close();
+$("weights-add").onclick = () => $("weigh-btn").onclick();
+$("chart-btn").onclick = openWeights;
+$("open-weights").onclick = openWeights;
 
 async function startApp() {
   handleOAuthReturn();

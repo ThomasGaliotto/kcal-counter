@@ -180,6 +180,42 @@ button { cursor: pointer; }
 .mini-card { border: 0; text-align: left; cursor: pointer; padding: 12px 14px; width: 100%; }
 .mid { font-size: 22px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
 .mid small { font-size: 13px; font-weight: 400; color: var(--muted); }
+/* ---------- Évolution du poids ---------- */
+:root { --chart-line: #16a34a; --chart-ref: #8b92a3; --chart-grid: #2a2e38; }
+.goal-btns { display: flex; gap: 6px; }
+.range-chips { margin: 2px 0 12px; }
+.chip.active { border-color: var(--accent); color: var(--text); font-weight: 600; }
+.weight-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.weight-stats div { background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.weight-stats small { display: block; color: var(--muted); font-size: 12px; }
+.weight-stats b { font-size: 17px; white-space: nowrap; }
+.weight-stats .note { grid-column: 1 / -1; background: none; padding: 0 2px; color: var(--muted); font-size: 13px; }
+.chart-wrap { position: relative; background: var(--bg); border-radius: 12px; padding: 6px 4px 2px; }
+#weight-chart { display: block; width: 100%; height: 220px; touch-action: pan-y; }
+#weight-chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+#weight-chart .grid { stroke: var(--chart-grid); stroke-width: 1; }
+#weight-chart .line { fill: none; stroke: var(--chart-line); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#weight-chart .dot { fill: var(--chart-line); stroke: var(--bg); stroke-width: 2; }
+#weight-chart .ref { fill: none; stroke: var(--chart-ref); stroke-width: 2; stroke-dasharray: 5 5; }
+#weight-chart .ref-dot { fill: var(--bg); stroke: var(--chart-ref); stroke-width: 2; }
+#weight-chart .cross { stroke: var(--muted); stroke-width: 1; }
+#weight-chart .hit { fill: transparent; }
+#weight-chart .empty { font-size: 14px; }
+.chart-tip {
+  position: absolute; top: 6px; pointer-events: none; background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 8px; font-size: 13px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.35);
+}
+.chart-tip small { color: var(--muted); display: block; }
+.chart-key { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin: 8px 2px 0; }
+.chart-key span::before { content: ""; display: inline-block; width: 16px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid var(--chart-line); }
+.chart-key span.ref::before { border-top: 2px dashed var(--chart-ref); }
+.weight-list { display: flex; flex-direction: column; }
+.weight-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.weight-row span:first-child { flex: 1; color: var(--muted); }
+.weight-row b { white-space: nowrap; }
+.weight-row .delta { color: var(--muted); font-size: 13px; width: 56px; text-align: right; }
+.weight-row button { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 4px; }
+
 /* ---------- Fenêtre de saisie ---------- */
 .ask .field input { font-size: 22px; font-weight: 600; }
 .ask .primary.wide { margin-top: 16px; }

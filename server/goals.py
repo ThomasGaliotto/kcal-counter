@@ -196,6 +196,18 @@ def add_weight(body: Weight, user=Depends(current_user)):
     return _me_with_plan(user["id"])
 
 
+@router.delete("/weights/{day}")
+def delete_weight(day: date, user=Depends(current_user)):
+    with db() as conn:
+        conn.execute("DELETE FROM weights WHERE user_id = ? AND day = ?", (user["id"], day.isoformat()))
+        latest = conn.execute("SELECT kg FROM weights WHERE user_id = ? ORDER BY day DESC LIMIT 1",
+                              (user["id"],)).fetchone()
+        if latest:
+            conn.execute("UPDATE users SET weight_kg = ? WHERE id = ?", (latest["kg"], user["id"]))
+    apply_plan(user["id"])
+    return _me_with_plan(user["id"])
+
+
 @router.get("/weights")
 def list_weights(days: int = 180, user=Depends(current_user)):
     since = (date.today() - timedelta(days=max(1, min(days, 3650)))).isoformat()

@@ -40,6 +40,7 @@
       <button id="account-close" class="remove" aria-label="Fermer">×</button>
     </div>
     <button id="open-goal" class="sheet-btn">🎯 Mon objectif</button>
+    <button id="open-weights" class="sheet-btn">📈 Évolution du poids</button>
     <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
     <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
@@ -56,6 +57,27 @@
       <p id="ask-error" class="error" hidden></p>
       <button id="ask-submit" type="submit" class="primary wide">Valider</button>
     </form>
+  </dialog>
+
+  <dialog id="weights-dialog" class="sheet settings weights">
+    <div class="sheet-head">
+      <strong>📈 Évolution du poids</strong>
+      <button id="weights-close" type="button" class="remove" aria-label="Fermer">×</button>
+    </div>
+    <div class="chips range-chips" role="group" aria-label="Période">
+      <button type="button" class="chip" data-range="30">1 mois</button>
+      <button type="button" class="chip" data-range="90">3 mois</button>
+      <button type="button" class="chip" data-range="all">Tout</button>
+    </div>
+    <div id="weight-stats" class="weight-stats"></div>
+    <div class="chart-wrap">
+      <svg id="weight-chart" role="img" aria-label="Courbe du poids"></svg>
+      <div id="chart-tip" class="chart-tip" hidden></div>
+    </div>
+    <div id="chart-key" class="chart-key"></div>
+    <button id="weights-add" type="button" class="primary wide">⚖️ Ajouter une pesée</button>
+    <h3>Pesées</h3>
+    <div id="weight-list" class="weight-list"></div>
   </dialog>
 
   <dialog id="goal-dialog" class="sheet settings">
@@ -253,7 +275,10 @@
         <div class="bar"><div id="goal-fill"></div></div>
         <div class="goal-foot">
           <span id="goal-rate" class="sub"></span>
-          <button id="weigh-btn" type="button" class="weigh-btn">⚖️ Se peser</button>
+          <span class="goal-btns">
+            <button id="chart-btn" type="button" class="weigh-btn" aria-label="Voir l'évolution du poids">📈</button>
+            <button id="weigh-btn" type="button" class="weigh-btn">⚖️ Se peser</button>
+          </span>
         </div>
         <p id="goal-msg" class="hint" hidden></p>
       </div>
