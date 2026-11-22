@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .auth import current_user
 from .auth import router as auth_router
@@ -91,16 +91,31 @@ async def no_stale_files(request, call_next):
     return response
 
 
-@app.post("/api/analyze")
-async def analyze(photo: UploadFile = File(...), user=Depends(current_user)):
-    image_b64 = shrink(await photo.read())
+TEXT_PROMPT = """Tu es un nutritionniste. L'utilisateur décrit en quelques mots ce qu'il a mangé ou bu.
+Transforme sa description en liste d'aliments, un par élément cité (ex : "pomme", "yaourt nature").
+Pour chacun, estime :
+- grams : la quantité indiquée, sinon une portion habituelle (pomme moyenne ~150 g, banane ~120 g, tranche de pain ~35 g,
+  yaourt ~125 g, œuf ~55 g, assiette de pâtes cuites ~250 g, café ~150 g, verre de jus ~200 g). Un nombre (« 2 œufs ») multiplie la portion.
+- kcal_100g, protein_100g, carbs_100g, fat_100g : valeurs pour 100 g de l'aliment tel qu'il est consommé (cuit pour les féculents).
+Noms en français, courts et précis. Si le texte ne parle pas de nourriture ni de boisson, renvoie une liste vide.
+Donne aussi un titre court pour le repas.
+
+EAU : water_ml = volume d'eau plate ou gazeuse (sans sucre) citée, en millilitres. Ne mets PAS l'eau dans items.
+Sans volume précisé : verre ~250 ml, grand verre ~330 ml, petite bouteille 500 ml, grande bouteille 1,5 L. 0 si pas d'eau.
+Les autres boissons (soda, jus, lait, café sucré, alcool…) vont dans items avec leurs calories.
+
+Description de l'utilisateur :
+"""
+
+
+async def ask_model(message: dict) -> dict:
     payload = {
         "model": OLLAMA_MODEL,
         "stream": False,
         "think": False,
         "format": SCHEMA,
         "options": {"temperature": 0.2},
-        "messages": [{"role": "user", "content": PROMPT, "images": [image_b64]}],
+        "messages": [message],
     }
     try:
         async with httpx.AsyncClient(timeout=300) as client:
@@ -116,6 +131,22 @@ async def analyze(photo: UploadFile = File(...), user=Depends(current_user)):
         it["grams"] = max(0, round(it["grams"]))
     result["water_ml"] = max(0, round(result.get("water_ml", 0) / 10) * 10)
     return result
+
+
+@app.post("/api/analyze")
+async def analyze(photo: UploadFile = File(...), user=Depends(current_user)):
+    image_b64 = shrink(await photo.read())
+    return await ask_model({"role": "user", "content": PROMPT, "images": [image_b64]})
+
+
+class MealText(BaseModel):
+    text: str = Field(min_length=2, max_length=1000)
+
+
+@app.post("/api/analyze-text")
+async def analyze_text(body: MealText, user=Depends(current_user)):
+    """Repas décrit en texte (« une pomme et un verre d'eau ») : même format que l'analyse photo."""
+    return await ask_model({"role": "user", "content": TEXT_PROMPT + body.text.strip()})
 
 
 class Item(BaseModel):
@@ -167,6 +198,25 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
         )),
         "meals": meals,
     }
+
+
+@app.put("/api/meals/{meal_id}")
+def update_meal(meal_id: int, meal: Meal, user=Depends(current_user)):
+    """Modifie un repas enregistré (titre, aliments, eau). Garde son heure sauf si eaten_at est fourni."""
+    if not meal.items and meal.water_ml <= 0:
+        raise HTTPException(400, "Rien à enregistrer : supprime plutôt le repas")
+    kcal = sum(i.grams * i.kcal_100g / 100 for i in meal.items)
+    with db() as conn:
+        row = conn.execute("SELECT eaten_at FROM meals WHERE id = ? AND user_id = ?", (meal_id, user["id"])).fetchone()
+        if not row:
+            raise HTTPException(404, "Repas introuvable")
+        when = meal.eaten_at or datetime.fromisoformat(row["eaten_at"])
+        conn.execute(
+            "UPDATE meals SET eaten_at = ?, day = ?, title = ?, items = ?, kcal = ?, water_ml = ? WHERE id = ?",
+            (when.isoformat(), when.date().isoformat(), meal.title,
+             json.dumps([i.model_dump() for i in meal.items]), kcal, max(0, meal.water_ml), meal_id),
+        )
+    return {"id": meal_id, "kcal": round(kcal)}
 
 
 @app.delete("/api/meals/{meal_id}")

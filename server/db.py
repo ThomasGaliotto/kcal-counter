@@ -31,7 +31,9 @@ USER_COLUMNS = {
     "height_cm": "REAL",
     "weight_kg": "REAL",
     "life_factor": "REAL NOT NULL DEFAULT 1.2",        # vie quotidienne hors sport
-    "protein_goal": "INTEGER",                         # g/jour ; vide = 1,6 g/kg (ou 100 g)
+    "protein_goal": "INTEGER",                         # g/jour effectif (calculé par goals.apply_plan)
+    "protein_mode": "TEXT NOT NULL DEFAULT 'auto'",    # auto | grams | per_kg
+    "protein_value": "REAL",                           # g/jour (grams) ou g/kg (per_kg)
     "goal_type": "TEXT",                               # lose | maintain | gain (vide = pas d'objectif)
     "goal_weight": "REAL",                             # poids visé (kg)
     "goal_date": "TEXT",                               # horizon (AAAA-MM-JJ)

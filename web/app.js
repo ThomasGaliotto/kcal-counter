@@ -104,8 +104,15 @@ async function loadDay() {
   const actList = $("activities");
   actList.innerHTML = "";
   for (const a of activities) {
-    const el = document.createElement("div");
+    // carte cliquable : ouvre l'activité sur Strava / Garmin Connect
+    const el = document.createElement(a.url ? "a" : "div");
     el.className = "meal activity";
+    if (a.url) {
+      el.href = a.url;
+      el.target = "_blank";
+      el.rel = "noopener";
+      el.setAttribute("aria-label", `${a.name}, ouvrir sur ${energy.source === "garmin" ? "Garmin Connect" : "Strava"}`);
+    }
     el.innerHTML = `<div class="meal-main">
         <div class="meal-head"><span></span></div>
         <div class="act-kcal"></div>
@@ -116,6 +123,7 @@ async function loadDay() {
     if (a.distance_km) bits.push(`${fmt(a.distance_km)} km`);
     if (a.minutes) bits.push(a.minutes >= 60 ? `${Math.floor(a.minutes / 60)} h ${String(a.minutes % 60).padStart(2, "0")}` : `${a.minutes} min`);
     bits.push(energy.source === "garmin" ? "Garmin" : "Strava");
+    if (a.url) bits.push("Voir ↗");
     el.querySelector(".meal-items").textContent = bits.join(" · ");
     actList.appendChild(el);
   }
@@ -133,7 +141,10 @@ async function loadDay() {
         <div class="meal-items"></div>
         <div class="meal-macros">P ${macro(m.items, "protein_100g")} g · G ${macro(m.items, "carbs_100g")} g · L ${macro(m.items, "fat_100g")} g</div>
       </div>
-      <button class="remove" aria-label="Supprimer">🗑</button>`;
+      <div class="meal-actions">
+        <button class="edit" aria-label="Modifier">✏️</button>
+        <button class="remove" aria-label="Supprimer">🗑</button>
+      </div>`;
     el.querySelector(".meal-head span").textContent = m.title;
     el.querySelector(".meal-items").textContent = m.items.map((i) => `${i.name} (${Math.round(i.grams)} g)`).join(", ");
     if (m.water_ml > 0) {
@@ -148,6 +159,7 @@ async function loadDay() {
       el.querySelector(".meal-head span:last-child").textContent = "";
       el.querySelector(".meal-macros").remove();
     }
+    el.querySelector(".edit").onclick = () => editMeal(m);
     el.querySelector(".remove").onclick = async () => {
       if (!confirm(`Supprimer « ${m.title} » ?`)) return;
       await api(`/api/meals/${m.id}`, { method: "DELETE" });
@@ -226,22 +238,57 @@ async function onPhoto(e) {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
+  const form = new FormData();
+  form.append("photo", file);
+  analyze(() => api("/api/analyze", { method: "POST", body: form }), { image: URL.createObjectURL(file) });
+}
+
+// Repas décrit en texte : « une pomme et un verre d'eau »
+$("text-btn").onclick = () => ask({
+  title: "✍️ Ajouter en texte",
+  submit: "Analyser",
+  fields: [{ key: "text", type: "textarea", label: "Qu'as-tu mangé ou bu ?",
+             placeholder: "ex : une pomme, un yaourt et un verre d'eau" }],
+  onSubmit: ({ text }) => {
+    analyze(() => api("/api/analyze-text", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    }), { text });
+  },
+});
+
+// Modifier un repas déjà enregistré : même écran que la vérification après analyse
+function editMeal(m) {
+  draft = { id: m.id, title: m.title, items: m.items.map((it) => ({ ...it })), water_ml: m.water_ml || 0 };
+  $("review").hidden = false;
+  document.body.classList.add("reviewing");
+  $("preview").hidden = true;
+  $("review-text").hidden = true;
+  $("analyzing").hidden = true;
+  $("error").hidden = true;
+  renderDraft();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function analyze(request, { image, text }) {
   draft = null;
   $("review").hidden = false;
   document.body.classList.add("reviewing");
   $("empty").hidden = true;
-  $("preview").src = URL.createObjectURL(file);
+  $("preview").hidden = !image;
+  if (image) $("preview").src = image;
+  $("review-text").hidden = !text;
+  $("review-text").textContent = text ? `« ${text} »` : "";
   $("analyzing").hidden = false;
   $("result").hidden = true;
   $("error").hidden = true;
   window.scrollTo({ top: 0, behavior: "smooth" });
-
-  const form = new FormData();
-  form.append("photo", file);
   try {
-    const res = await api("/api/analyze", { method: "POST", body: form });
+    const res = await request();
     draft = { title: res.title || "Repas", items: res.items || [], water_ml: res.water_ml || 0 };
-    if (!draft.items.length && !draft.water_ml) throw new Error("Rien de reconnu. Ajoute-le à la main ou reprends la photo.");
+    if (!draft.items.length && !draft.water_ml) {
+      throw new Error(text ? "Rien de reconnu. Précise ta description ou ajoute-le à la main."
+                           : "Rien de reconnu. Ajoute-le à la main ou reprends la photo.");
+    }
     renderDraft();
   } catch (err) {
     $("analyzing").hidden = true;
@@ -261,6 +308,9 @@ function renderDraft() {
   draft.items.forEach((it, idx) => {
     const row = $("item-tpl").content.firstElementChild.cloneNode(true);
     const name = row.querySelector(".name"), grams = row.querySelector(".grams"), k100 = row.querySelector(".k100");
+    const p100 = row.querySelector(".p100");
+    p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
+    p100.oninput = () => (it.protein_100g = Number(p100.value) || 0);
     name.value = it.name;
     grams.value = Math.round(it.grams);
     k100.value = Math.round(it.kcal_100g);
@@ -311,9 +361,9 @@ $("save").onclick = async () => {
   $("save").disabled = true;
   try {
     // Le repas est rangé dans le jour affiché (pratique pour rattraper un oubli d'hier)
-    const eaten_at = day === todayISO() ? null : `${day}T12:00:00`;
-    await api("/api/meals", {
-      method: "POST",
+    const eaten_at = draft.id || day === todayISO() ? null : `${day}T12:00:00`;
+    await api(draft.id ? `/api/meals/${draft.id}` : "/api/meals", {
+      method: draft.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: draft.title || (items.length ? "Repas" : "Eau"), items, water_ml, eaten_at }),
     });
@@ -331,29 +381,66 @@ $("next").onclick = () => { if (day < todayISO()) { day = shiftDay(day, 1); load
 /* Fenêtre de saisie dans l'app (prompt() n'existe pas dans tous les navigateurs intégrés).
    fields : [{ key, label, type ("number" | "password" | "text"), value, unit, step, min, max }]
    onSubmit(values) : async ; lever une erreur laisse la fenêtre ouverte avec le message. */
-function ask({ title, fields, submit = "Valider", onSubmit }) {
+// Fenêtre de saisie. Types de champ : number, text, password, textarea, choice (puces), note (texte d'aide).
+// onChange(ui) est appelé quand une valeur change ; ui[clé] = { label, text, input, unit, get() }.
+function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
   const dlg = $("ask");
   $("ask-title").textContent = title;
   $("ask-submit").textContent = submit;
   $("ask-error").hidden = true;
   const box = $("ask-fields");
   box.innerHTML = "";
-  const inputs = {};
+  const ui = {};
+  const changed = () => onChange?.(ui);
   for (const f of fields) {
-    const label = document.createElement("label");
+    if (f.type === "note") {
+      const p = Object.assign(document.createElement("p"), { className: "hint ask-note", textContent: f.label || "" });
+      ui[f.key] = { label: p, text: p };
+      box.append(p);
+      continue;
+    }
+    const label = document.createElement(f.type === "choice" ? "div" : "label");
     label.className = "field";
-    label.textContent = f.label;
-    const input = document.createElement("input");
-    input.type = f.type === "number" ? "text" : f.type || "text";
+    const text = document.createTextNode(f.label);
+    label.append(text);
+    ui[f.key] = { label, text };
+    if (f.type === "choice") {
+      let current = f.value;
+      const group = Object.assign(document.createElement("div"), { className: "chips" });
+      group.setAttribute("role", "group");
+      for (const o of f.options) {
+        const b = Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: o.label });
+        const sync = () => { b.classList.toggle("active", o.value === current); b.setAttribute("aria-pressed", o.value === current); };
+        b.sync = sync;
+        b.onclick = () => { current = o.value; group.querySelectorAll(".chip").forEach((c) => c.sync()); changed(); };
+        sync();
+        group.append(b);
+      }
+      ui[f.key].get = () => current;
+      label.append(group);
+      box.append(label);
+      continue;
+    }
+    const input = document.createElement(f.type === "textarea" ? "textarea" : "input");
+    if (f.type === "textarea") {
+      input.rows = 3;
+      input.placeholder = f.placeholder || "";
+    } else {
+      input.type = f.type === "number" ? "text" : f.type || "text";
+    }
     if (f.type === "number") input.inputMode = f.step && f.step < 1 ? "decimal" : "numeric";
     if (f.type === "password") input.autocomplete = f.key === "current" ? "current-password" : "new-password";
     input.value = f.value ?? "";
     input.required = true;
-    inputs[f.key] = input;
+    input.oninput = changed;
+    ui[f.key].input = input;
+    ui[f.key].get = () => input.value;
     if (f.unit) {
       const wrap = document.createElement("span");
       wrap.className = "input-unit";
-      wrap.append(input, " " + f.unit);
+      const unit = document.createTextNode(" " + f.unit);
+      wrap.append(input, unit);
+      ui[f.key].unit = unit;
       label.append(wrap);
     } else {
       label.append(input);
@@ -364,14 +451,19 @@ function ask({ title, fields, submit = "Valider", onSubmit }) {
     e.preventDefault();
     const values = {};
     for (const f of fields) {
-      const raw = inputs[f.key].value.trim();
+      if (f.type === "note") continue;
+      const u = ui[f.key];
+      if (u.label.hidden) continue; // champ masqué : ignoré
+      if (f.type === "choice") { values[f.key] = u.get(); continue; }
+      const raw = u.input.value.trim();
       if (f.type === "number") {
         const n = Number(raw.replace(",", "."));
         if (raw === "" || !Number.isFinite(n) || (f.min != null && n < f.min) || (f.max != null && n > f.max)) {
-          return showAskError(`${f.label} : valeur entre ${f.min ?? "…"} et ${f.max ?? "…"}${f.unit ? " " + f.unit : ""}.`);
+          return showAskError(`${f.label || "Valeur"} : entre ${fmtNum(f.min) ?? "…"} et ${fmtNum(f.max) ?? "…"}${f.unit ? " " + f.unit : ""}.`);
         }
         values[f.key] = n;
       } else {
+        if (!raw) return showAskError("Ce champ ne peut pas être vide.");
         values[f.key] = raw;
       }
     }
@@ -386,11 +478,12 @@ function ask({ title, fields, submit = "Valider", onSubmit }) {
     }
   };
   $("ask-close").onclick = () => dlg.close();
+  changed();
   dlg.showModal();
-  const first = inputs[fields[0].key];
-  first.focus();
-  first.select();
+  const first = Object.values(ui).find((u) => u.input && !u.label.hidden)?.input;
+  if (first) { first.focus(); first.select(); }
 }
+const fmtNum = (n) => (n == null ? null : String(n).replace(".", ","));
 function showAskError(msg) {
   $("ask-error").textContent = msg;
   $("ask-error").hidden = false;
@@ -412,14 +505,65 @@ $("goal-btn").onclick = () => {
   else openSettings();
 };
 $("water-gauge").onclick = () => editGoal("water_goal", "💧 Objectif d'eau", "ml", 20000);
-// Objectif de protéines : choisi, sinon 1,6 g par kg de poids, sinon 100 g
-const proteinGoal = () => me.protein_goal || (me.weight_kg ? Math.round(me.weight_kg * 1.6) : 100);
-$("protein-card").onclick = async () => {
-  if (plan) return openGoal(); // avec un objectif, les protéines en découlent
+// Objectif de protéines : calculé par le serveur (objectif de poids, ou réglé à la main en g ou en g/kg)
+const proteinGoal = () => me.protein_goal || 100;
+$("protein-card").onclick = () => {
+  const weight = plan?.current_weight || me.weight_kg;
+  const autoG = plan?.protein_auto_goal ?? (weight ? Math.round(weight * 1.6) : 100);
+  const autoKg = plan ? plan.protein_auto_per_kg : weight ? 1.6 : null;
+  const mode0 = me.protein_mode || "auto";
+  const defaults = {
+    grams: mode0 === "grams" ? me.protein_value : proteinGoal(),
+    per_kg: mode0 === "per_kg" ? me.protein_value : weight ? Math.round((proteinGoal() / weight) * 10) / 10 : 1.6,
+  };
+  const fields = [
+    { key: "mode", type: "choice", label: "Calcul", value: mode0, options: [
+      { value: "auto", label: "Auto" }, { value: "grams", label: "En grammes" }, { value: "per_kg", label: "En g/kg" }] },
+    { key: "v", type: "number", label: "Objectif par jour", unit: "g" },
+    { key: "note", type: "note" },
+  ];
+  let shown = null;
   ask({
     title: "💪 Objectif de protéines",
-    fields: [{ key: "v", label: "Objectif par jour", type: "number", value: proteinGoal(), unit: "g", min: 1, max: 500 }],
-    onSubmit: ({ v }) => patchMe({ protein_goal: Math.round(v) }),
+    fields,
+    onChange(ui) {
+      const mode = ui.mode.get();
+      ui.v.label.hidden = mode === "auto";
+      if (mode !== shown) { // changement de mode : on remet la valeur par défaut de ce mode
+        if (mode !== "auto") ui.v.input.value = fmtNum(defaults[mode]);
+        shown = mode;
+      }
+      const f = fields[1];
+      if (mode === "per_kg") Object.assign(f, { label: "Par kg de poids", min: 0.5, max: 4, step: 0.1 });
+      else Object.assign(f, { label: "Objectif par jour", min: 20, max: 500, step: 1 });
+      ui.v.text.textContent = f.label;
+      ui.v.unit && (ui.v.unit.textContent = mode === "per_kg" ? " g/kg" : " g");
+      ui.v.input.inputMode = mode === "per_kg" ? "decimal" : "numeric";
+      const n = Number(String(ui.v.input.value).replace(",", "."));
+      let note = "";
+      if (mode === "auto") {
+        note = plan
+          ? `Selon ton objectif « ${plan.label} » : ${autoG} g par jour (${fmtNum(autoKg)} g/kg).`
+          : weight ? `${autoG} g par jour (1,6 g par kg de poids).` : "100 g par jour (renseigne ton poids pour un calcul en g/kg).";
+      } else if (mode === "per_kg") {
+        note = weight ? (n > 0 ? `= ${Math.round(n * weight)} g par jour avec ${fmtKg(weight)} kg, recalculé à chaque pesée.` : "")
+          : "Renseigne d'abord ton poids (bouton Se peser).";
+      } else if (weight && n > 0) {
+        note = `= ${fmtNum(Math.round((n / weight) * 10) / 10)} g/kg avec ${fmtKg(weight)} kg. Fixe, même si ton poids change.`;
+      }
+      ui.note.text.textContent = note;
+    },
+    onSubmit: async ({ mode, v }) => {
+      const res = await api("/api/protein", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode, value: mode === "auto" ? null : v }),
+      });
+      const { plan: p, ...user } = res;
+      me = user;
+      plan = p;
+      renderGoalCard();
+      loadDay();
+    },
   });
 };
 
@@ -793,7 +937,7 @@ function renderGoalCard() {
   $("goal-fill").parentElement.hidden = plan.progress == null;
   $("goal-fill").style.width = Math.round((plan.progress || 0) * 100) + "%";
   const rate = plan.weekly_change_kg ? `${plan.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(plan.weekly_change_kg))} kg/sem · ` : "";
-  $("goal-rate").textContent = `${rate}bilan ${signed(plan.balance_goal)} kcal/j · ${plan.protein_goal ?? "?"} g prot.`;
+  $("goal-rate").textContent = `${rate}bilan ${signed(plan.balance_goal)} kcal/j · ${plan.protein_goal ?? "?"} g prot.${plan.protein_manual ? " (réglé à la main)" : ""}`;
   $("goal-msg").hidden = !plan.message;
   $("goal-msg").textContent = plan.message || "";
   $("goal-msg").classList.toggle("warn-text", !!plan.capped || /dépassé/.test(plan.message || ""));
@@ -842,7 +986,7 @@ async function previewGoal() {
     });
     $("goal-error").hidden = true;
     const rate = p.weekly_change_kg ? ` (${p.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(p.weekly_change_kg))} kg/semaine)` : "";
-    box.innerHTML = `Bilan visé : <b></b> par jour<span class="r"></span><br>Protéines : <b></b> par jour (${fmtKg(p.protein_per_kg)} g/kg)`;
+    box.innerHTML = `Bilan visé : <b></b> par jour<span class="r"></span><br>Protéines : <b></b> par jour (${p.protein_manual ? "réglé à la main" : fmtKg(p.protein_per_kg) + " g/kg"})`;
     const [bal, prot] = box.querySelectorAll("b");
     bal.textContent = `${signed(p.balance_goal)} kcal`;
     prot.textContent = `${p.protein_goal} g`;

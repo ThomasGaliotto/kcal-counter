@@ -5,6 +5,7 @@ Repères utilisés :
 - perte : rythme plafonné à 1 % du poids par semaine et à 1 000 kcal/jour de déficit
 - prise de muscle : surplus plafonné à +500 kcal/jour (au-delà, surtout du gras), +300 par défaut
 - protéines : 2,0 g/kg en perte (préserver le muscle), 1,8 g/kg en prise de muscle, 1,6 g/kg en maintien
+  (sauf réglage à la main, en grammes ou en g/kg : voir PUT /api/protein)
 """
 
 from datetime import date, timedelta
@@ -83,6 +84,25 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
     return plan
 
 
+def protein_target(user, weight: float | None, plan: dict | None) -> dict:
+    """Objectif de protéines : réglage à la main (g ou g/kg) sinon celui de l'objectif, sinon 1,6 g/kg."""
+    if plan and plan["protein_goal"]:
+        auto = {"protein_goal": plan["protein_goal"], "protein_per_kg": plan["protein_per_kg"]}
+    elif weight:
+        auto = {"protein_goal": round(weight * 1.6), "protein_per_kg": 1.6}
+    else:
+        auto = {"protein_goal": 100, "protein_per_kg": None}
+    result = {**auto, "protein_manual": False,
+              "protein_auto_goal": auto["protein_goal"], "protein_auto_per_kg": auto["protein_per_kg"]}
+    mode, value = user["protein_mode"] or "auto", user["protein_value"]
+    if mode == "grams" and value:
+        result.update(protein_goal=round(value), protein_manual=True,
+                      protein_per_kg=round(value / weight, 2) if weight else None)
+    elif mode == "per_kg" and value and weight:
+        result.update(protein_goal=round(value * weight), protein_per_kg=value, protein_manual=True)
+    return result
+
+
 def plan_for(user) -> dict | None:
     if not user["goal_type"]:
         return None
@@ -98,6 +118,7 @@ def plan_for(user) -> dict | None:
         plan["progress"] = max(0.0, min(1.0, (start - weight) / (start - target)))
     else:
         plan["progress"] = None
+    plan.update(protein_target(user, weight, plan))
     # objectif kcal en mode « sans dépense mesurée » : métabolisme × vie quotidienne + bilan visé
     base = bmr({**dict(user), "weight_kg": weight or user["weight_kg"]})
     plan["kcal_goal"] = round(base * (user["life_factor"] or 1.2) + plan["balance_goal"]) if base else None
@@ -109,11 +130,12 @@ def apply_plan(user_id: int) -> None:
     with db() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     plan = plan_for(user)
-    if not plan:
+    if not plan:  # sans objectif, seules les protéines suivent le poids / le réglage
+        protein = protein_target(user, current_weight(user_id, user["weight_kg"]), None)
+        with db() as conn:
+            conn.execute("UPDATE users SET protein_goal = ? WHERE id = ?", (protein["protein_goal"], user_id))
         return
-    sets = {"balance_goal": plan["balance_goal"]}
-    if plan["protein_goal"]:
-        sets["protein_goal"] = plan["protein_goal"]
+    sets = {"balance_goal": plan["balance_goal"], "protein_goal": plan["protein_goal"]}
     if plan["kcal_goal"]:
         sets["kcal_goal"] = max(1000, plan["kcal_goal"])
     with db() as conn:
@@ -144,7 +166,9 @@ def preview_goal(body: Goal, user=Depends(current_user)):
     _validate(body)
     weight = body.current_weight or current_weight(user["id"], user["weight_kg"])
     target = body.target_weight if body.type != "maintain" else None
-    return compute_plan(body.type, weight, target, body.target_date if target else None)
+    plan = compute_plan(body.type, weight, target, body.target_date if target else None)
+    plan.update(protein_target(user, weight, plan))  # un réglage à la main reste prioritaire
+    return plan
 
 
 @router.put("/goal")
@@ -171,6 +195,30 @@ def clear_goal(user=Depends(current_user)):
     with db() as conn:
         conn.execute("UPDATE users SET goal_type = NULL, goal_weight = NULL, goal_date = NULL, "
                      "goal_start_weight = NULL, goal_start_date = NULL WHERE id = ?", (user["id"],))
+    apply_plan(user["id"])
+    return _me_with_plan(user["id"])
+
+
+class Protein(BaseModel):
+    mode: Literal["auto", "grams", "per_kg"]
+    value: float | None = None
+
+
+@router.put("/protein")
+def set_protein(body: Protein, user=Depends(current_user)):
+    """Objectif de protéines réglé à la main : en grammes par jour ou en g par kg de poids."""
+    if body.mode == "grams" and not (body.value and 20 <= body.value <= 500):
+        raise HTTPException(400, "Indique un objectif entre 20 et 500 g par jour")
+    if body.mode == "per_kg":
+        if not (body.value and 0.5 <= body.value <= 4):
+            raise HTTPException(400, "Indique un objectif entre 0,5 et 4 g par kg")
+        if not current_weight(user["id"], user["weight_kg"]):
+            raise HTTPException(400, "Renseigne d'abord ton poids pour un objectif en g/kg")
+    value = None if body.mode == "auto" else round(body.value, 2)
+    with db() as conn:
+        conn.execute("UPDATE users SET protein_mode = ?, protein_value = ? WHERE id = ?",
+                     (body.mode, value, user["id"]))
+    apply_plan(user["id"])
     return _me_with_plan(user["id"])
 
 

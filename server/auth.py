@@ -44,6 +44,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
+    "protein_mode", "protein_value",
 )
 
 
@@ -117,7 +118,6 @@ class Profile(BaseModel):
     height_cm: float | None = Field(None, ge=50, le=260)
     weight_kg: float | None = Field(None, ge=20, le=400)
     life_factor: float | None = Field(None, ge=1.0, le=2.0)
-    protein_goal: int | None = Field(None, gt=0, le=500)
 
 
 class PasswordChange(BaseModel):
@@ -187,6 +187,11 @@ def update_me(body: Profile, user=Depends(current_user)):
         with db() as conn:
             conn.execute(f"UPDATE users SET {sets} WHERE id = ?", (*changes.values(), user["id"]))
             user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if {"weight_kg", "sex", "birth_year", "height_cm", "life_factor"} & changes.keys():
+            from .goals import apply_plan  # import tardif : goals dépend de auth
+            apply_plan(user["id"])
+            with db() as conn:
+                user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
     return _public(user)
 
 

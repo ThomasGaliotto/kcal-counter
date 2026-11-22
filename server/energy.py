@@ -77,6 +77,8 @@ def _store(user_id: int, day: date, source: str, data) -> None:
 def _with_cache(user_id: int, day: date, source: str, fetch):
     """Renvoie (données, avertissement). Sert le cache si le service distant échoue."""
     data, fresh = _cached(user_id, day, source)
+    if fresh and any("url" not in a for a in data.get("activities", [])):
+        fresh = False  # cache d'avant les liens vers l'activité : on le rafraîchit une fois
     if fresh:
         return data, None
     try:
@@ -143,6 +145,7 @@ def _strava_day(user, day: date) -> dict:
                 "distance_km": round((a.get("distance") or 0) / 1000, 1),
                 "minutes": round((a.get("moving_time") or 0) / 60),
                 "start": a.get("start_date_local"),
+                "url": f"https://www.strava.com/activities/{a['id']}" if a.get("id") else None,
             })
     return {"activities": activities}
 
@@ -276,6 +279,7 @@ def _garmin_day(user, day: date) -> dict:
             "distance_km": round((a.get("distance") or 0) / 1000, 1),
             "minutes": round((a.get("duration") or 0) / 60),
             "start": a.get("startTimeLocal"),
+            "url": f"https://connect.garmin.com/modern/activity/{a['activityId']}" if a.get("activityId") else None,
         })
     try:  # conserve un jeton éventuellement rafraîchi
         client.client.dump(str(path))
