@@ -265,6 +265,8 @@ function editMeal(m) {
   $("review-text").hidden = true;
   $("analyzing").hidden = true;
   $("error").hidden = true;
+  $("fix-status").hidden = true;
+  $("fix-text").value = "";
   renderDraft();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -281,6 +283,8 @@ async function analyze(request, { image, text }) {
   $("analyzing").hidden = false;
   $("result").hidden = true;
   $("error").hidden = true;
+  $("fix-status").hidden = true;
+  $("fix-text").value = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
   try {
     const res = await request();
@@ -312,10 +316,37 @@ function renderDraft() {
     p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
     p100.oninput = () => (it.protein_100g = Number(p100.value) || 0);
     name.value = it.name;
+    if (it.estimatedFor === undefined) it.estimatedFor = it.name;
     grams.value = Math.round(it.grams);
     k100.value = Math.round(it.kcal_100g);
     const refresh = () => { row.querySelector(".kcal").textContent = Math.round(kcalOf(it)) + " kcal"; updateDraftTotal(); };
     name.oninput = () => (it.name = name.value);
+    // aliment ajouté ou renommé : l'IA recalcule ses valeurs (et sa portion s'il vient d'être ajouté)
+    name.onchange = async () => {
+      const n = name.value.trim();
+      if (!n || n === it.estimatedFor) return;
+      it.estimatedFor = n;
+      row.querySelector(".kcal").textContent = "calcul…";
+      try {
+        const est = await api("/api/estimate-item", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: n, grams: it.fresh ? null : it.grams || null }),
+        });
+        if (it.estimatedFor !== n) return; // renommé entre-temps
+        Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g });
+        if (it.fresh) it.grams = est.grams || it.grams;
+        it.fresh = false;
+        if (!row.isConnected) return renderDraft(); // liste redessinée pendant le calcul
+        grams.value = Math.round(it.grams);
+        k100.value = Math.round(it.kcal_100g);
+        p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
+      } catch (err) {
+        it.estimatedFor = null;
+        $("fix-status").textContent = `Calcul impossible pour « ${n} » : ${err.message}`;
+        $("fix-status").hidden = false;
+      }
+      refresh();
+    };
     grams.oninput = () => { it.grams = Number(grams.value) || 0; refresh(); };
     k100.oninput = () => { it.kcal_100g = Number(k100.value) || 0; refresh(); };
     row.querySelector(".remove").onclick = () => { draft.items.splice(idx, 1); renderDraft(); };
@@ -340,12 +371,46 @@ function updateDraftTotal() {
 }
 
 $("add-item").onclick = () => {
-  draft.items.push({ name: "", grams: 100, kcal_100g: 0, protein_100g: 0, carbs_100g: 0, fat_100g: 0 });
+  draft.items.push({ name: "", grams: 100, kcal_100g: 0, protein_100g: 0, carbs_100g: 0, fat_100g: 0, fresh: true });
   renderDraft();
   const names = document.querySelectorAll("#items .name");
   names[names.length - 1].focus();
 };
 $("meal-title").oninput = (e) => (draft.title = e.target.value);
+
+// Corriger le plat avec un commentaire : l'IA reprend toute l'analyse (aliments, grammes, kcal, macros, eau)
+$("fix-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const comment = $("fix-text").value.trim();
+  if (comment.length < 2 || !draft) return;
+  const btn = $("fix-btn");
+  btn.disabled = true;
+  btn.textContent = "Calcul…";
+  $("fix-status").hidden = true;
+  try {
+    const res = await api("/api/analyze-fix", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: draft.title, water_ml: draft.water_ml || 0, comment,
+        items: draft.items.filter((it) => it.name.trim()).map(({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g }) =>
+          ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0 })),
+      }),
+    });
+    draft.title = res.title || draft.title;
+    draft.items = res.items || [];
+    draft.water_ml = res.water_ml || 0;
+    $("fix-text").value = "";
+    renderDraft();
+    $("fix-status").textContent = "Corrigé ✓ — vérifie puis enregistre.";
+    $("fix-status").hidden = false;
+  } catch (err) {
+    $("fix-status").textContent = err.message;
+    $("fix-status").hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Corriger";
+  }
+};
 
 function closeReview() {
   draft = null;
@@ -917,8 +982,27 @@ function handleOAuthReturn() {
     scope: "Il faut cocher l'accès aux activités pour que Kcal puisse lire tes calories.",
     expired: "La demande a expiré, réessaie depuis les réglages.",
     error: "Strava a refusé la connexion. Vérifie la configuration (voir le README).",
+    notconfigured: "Strava n'est pas encore configuré sur le serveur (Client ID et secret).",
   }[status];
+  if (status === "wronghost" && me?.strava_host) return setTimeout(wrongStravaHost, 300);
   if (msg) setTimeout(() => notice(msg, "Strava"), 300);
+}
+// Connexion lancée depuis une autre adresse que celle déclarée chez Strava (sinon : page d'erreur Strava)
+function wrongStravaHost() {
+  const host = me.strava_host;
+  ask({
+    title: "Strava",
+    submit: "Ouvrir la bonne adresse",
+    fields: [{ key: "m", type: "note", label: `Strava n'accepte la connexion que depuis ${host}, l'adresse déclarée dans tes réglages Strava. `
+      + "Ouvre Kcal depuis cette adresse (il faudra peut-être te reconnecter), puis relance la connexion." }],
+    onSubmit: () => { location.href = `https://${host}/`; },
+  });
+  const force = Object.assign(document.createElement("a"), {
+    href: "/api/strava/connect?force=1", className: "hint",
+    textContent: "J'ai changé ce domaine chez Strava : essayer quand même",
+  });
+  force.style.display = "block";
+  $("ask-fields").append(force);
 }
 
 // ---------- Objectif (perte de poids, maintien, muscle) ----------

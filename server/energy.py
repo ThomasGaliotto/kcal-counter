@@ -200,8 +200,16 @@ def strava_config(body: StravaConfig, user=Depends(current_user)):
 
 
 @router.get("/strava/connect")
-def strava_connect(request: Request, user=Depends(current_user)):
-    cid, _ = _strava_creds()
+def strava_connect(request: Request, force: bool = False, user=Depends(current_user)):
+    # Strava affiche une page d'erreur brute si l'adresse de retour n'est pas sur le « domaine du rappel »
+    # déclaré chez lui : on retient le domaine qui a marché et on prévient avant d'y envoyer.
+    known = os.environ.get("STRAVA_CALLBACK_HOST")
+    if known and request.url.hostname != known and not force:
+        return RedirectResponse("/?strava=wronghost")
+    try:
+        cid, _ = _strava_creds()
+    except HTTPException:
+        return RedirectResponse("/?strava=notconfigured")
     now = time.time()
     for k in [k for k, (_, exp) in _oauth_states.items() if exp < now]:
         _oauth_states.pop(k, None)
@@ -216,7 +224,7 @@ def strava_connect(request: Request, user=Depends(current_user)):
 
 
 @router.get("/strava/callback", name="strava_callback")
-def strava_callback(state: str = "", code: str = "", error: str = "", scope: str = ""):
+def strava_callback(request: Request, state: str = "", code: str = "", error: str = "", scope: str = ""):
     owner = _oauth_states.pop(state, None)
     if not owner or owner[1] < time.time():
         return RedirectResponse("/?strava=expired")
@@ -234,6 +242,8 @@ def strava_callback(state: str = "", code: str = "", error: str = "", scope: str
     with db() as conn:
         conn.execute("UPDATE users SET energy_source = 'strava' WHERE id = ?", (owner[0],))
         conn.execute("DELETE FROM energy_cache WHERE user_id = ? AND source = 'strava'", (owner[0],))
+    if request.url.hostname and os.environ.get("STRAVA_CALLBACK_HOST") != request.url.hostname:
+        _write_env({"STRAVA_CALLBACK_HOST": request.url.hostname})  # domaine accepté par Strava
     return RedirectResponse("/?strava=ok")
 
 

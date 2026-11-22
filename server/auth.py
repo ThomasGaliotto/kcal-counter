@@ -60,6 +60,7 @@ def _public(user) -> dict:
     data["is_admin"] = is_admin(user)
     data["strava_connected"] = bool(user["strava_refresh"])
     data["strava_available"] = bool(os.environ.get("STRAVA_CLIENT_ID"))
+    data["strava_host"] = os.environ.get("STRAVA_CALLBACK_HOST")  # adresse acceptée par Strava
     data["garmin_connected"] = (garmin_token_dir(user["id"]) / "garmin_tokens.json").exists()
     return data
 

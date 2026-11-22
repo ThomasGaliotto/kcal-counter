@@ -353,3 +353,11 @@ body.reviewing .add-text { display: none; }
 
 /* bouton de confirmation d'une suppression */
 #ask-submit.danger { background: var(--danger); color: #2a0707; }
+
+/* corriger un plat avec un commentaire */
+.fix-row { display: flex; gap: 8px; margin: 4px 0 2px; }
+.fix-row input {
+  flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 16px;
+}
+.fix-row button { white-space: nowrap; }

@@ -108,12 +108,15 @@ Description de l'utilisateur :
 """
 
 
-async def ask_model(message: dict) -> dict:
+ITEM_SCHEMA = SCHEMA["properties"]["items"]["items"]
+
+
+async def _chat(message: dict, schema: dict) -> dict:
     payload = {
         "model": OLLAMA_MODEL,
         "stream": False,
         "think": False,
-        "format": SCHEMA,
+        "format": schema,
         "options": {"temperature": 0.2},
         "messages": [message],
     }
@@ -124,11 +127,21 @@ async def ask_model(message: dict) -> dict:
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Ollama injoignable : {exc}") from exc
     try:
-        result = json.loads(r.json()["message"]["content"])
+        return json.loads(r.json()["message"]["content"])
     except (KeyError, json.JSONDecodeError) as exc:
         raise HTTPException(502, "Réponse du modèle invalide") from exc
-    for it in result.get("items", []):
-        it["grams"] = max(0, round(it["grams"]))
+
+
+def _clean_item(it: dict) -> dict:
+    it["grams"] = max(0, round(it.get("grams") or 0))
+    for k in ("kcal_100g", "protein_100g", "carbs_100g", "fat_100g"):
+        it[k] = max(0.0, round(float(it.get(k) or 0), 1))
+    return it
+
+
+async def ask_model(message: dict) -> dict:
+    result = await _chat(message, SCHEMA)
+    result["items"] = [_clean_item(it) for it in result.get("items", [])]
     result["water_ml"] = max(0, round(result.get("water_ml", 0) / 10) * 10)
     return result
 
@@ -163,6 +176,57 @@ class Meal(BaseModel):
     items: list[Item]
     water_ml: float = 0
     eaten_at: datetime | None = None
+
+
+FIX_PROMPT = """Tu es un nutritionniste. Voici l'analyse actuelle d'un repas (JSON), puis la correction de l'utilisateur.
+Applique sa correction : remplace, retire ou ajoute les aliments cités, change les quantités s'il en donne.
+Garde tels quels les aliments qu'il ne mentionne pas (mêmes noms, grammes et valeurs).
+Pour chaque aliment nouveau ou modifié, recalcule grams (portion habituelle si non précisée, ou la quantité de l'aliment remplacé)
+et les valeurs pour 100 g tel que consommé : kcal_100g, protein_100g, carbs_100g, fat_100g (cuit pour les féculents).
+Mets à jour le titre si le plat a changé. EAU : water_ml = eau plate ou gazeuse uniquement (pas dans items).
+Renvoie l'analyse complète corrigée.
+
+Analyse actuelle :
+{current}
+
+Correction de l'utilisateur : {comment}"""
+
+ITEM_PROMPT = """Tu es un nutritionniste. Donne les valeurs nutritionnelles de l'aliment « {name} » pour 100 g tel qu'il est consommé
+(cuit pour les féculents et les viandes) : kcal_100g, protein_100g, carbs_100g, fat_100g.
+grams : {grams}
+name : reprends le nom donné, corrigé si besoin (court, en français)."""
+
+
+class MealFix(BaseModel):
+    title: str = ""
+    items: list[Item] = []
+    water_ml: float = 0
+    comment: str = Field(min_length=2, max_length=1000)
+
+
+@app.post("/api/analyze-fix")
+async def analyze_fix(body: MealFix, user=Depends(current_user)):
+    """Corrige un repas d'après un commentaire (« pas de riz mais des pâtes ») et recalcule tout."""
+    current = json.dumps({"title": body.title, "water_ml": body.water_ml,
+                          "items": [i.model_dump() for i in body.items]}, ensure_ascii=False)
+    return await ask_model({"role": "user", "content": FIX_PROMPT.format(current=current, comment=body.comment.strip())})
+
+
+class ItemQuery(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    grams: float | None = Field(None, gt=0, le=5000)
+
+
+@app.post("/api/estimate-item")
+async def estimate_item(body: ItemQuery, user=Depends(current_user)):
+    """Valeurs nutritionnelles d'un aliment ajouté ou renommé à la main."""
+    grams = (f"garde {round(body.grams)}" if body.grams
+             else "la portion habituelle en grammes (ex : pomme 150, yaourt 125, assiette de pâtes cuites 250)")
+    it = _clean_item(await _chat({"role": "user", "content": ITEM_PROMPT.format(name=body.name.strip(), grams=grams)},
+                                 ITEM_SCHEMA))
+    if body.grams:
+        it["grams"] = round(body.grams)
+    return it
 
 
 @app.post("/api/meals")
