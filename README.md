@@ -6,6 +6,10 @@ You fix anything that's off, save it, and the app keeps your daily total.
 It tracks hydration too: plain water and every non-alcoholic drink (coffee, tea, milk, juice, soda…) fill the blue gauge.
 Alcohol and water contained in food (soup, fruit) don't count: the ~2 L/day guideline is for drinks, food already
 provides about 20 % of daily water.
+Alcohol makes you lose water (about 10 ml of extra urine per gram of alcohol), so it raises the day's
+water target instead ("dont +260 ml alcool"), like sport does.
+
+The small **i** buttons on the cards explain how each number is computed.
 
 - `server/app.py`: FastAPI API (photo and text analysis via Ollama, meals, water)
 - `server/auth.py`: accounts (e-mail + password), cookie sessions

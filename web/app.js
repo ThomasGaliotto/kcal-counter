@@ -85,13 +85,18 @@ async function loadDay() {
   // Sport: +500 ml per hour of recorded activity (Strava/Garmin), rounded to 50 ml
   const sportMin = (energy?.activities || []).reduce((s, a) => s + (a.minutes || 0), 0);
   const sportWater = Math.round((sportMin / 60) * 500 / 50) * 50;
-  const waterTarget = water_goal + sportWater;
+  // Alcohol: ~10 ml of extra urine per gram of alcohol, to drink back
+  const alcoholG = data.total_alcohol_g || 0;
+  const alcoholWater = Math.round(alcoholG * 10 / 10) * 10;
+  const waterTarget = water_goal + sportWater + alcoholWater;
   $("water-goal").textContent = fmt(waterTarget);
-  $("water-goal").title = sportWater ? `${fmt(water_goal)} ml + ${fmt(sportWater)} ml pour ${sportMin} min de sport` : "";
-  $("water-sport").hidden = !sportWater;
-  $("water-sport").textContent = `dont +${fmt(sportWater)} ml sport`;
+  const extras = [sportWater && `+${fmt(sportWater)} ml sport`, alcoholWater && `+${fmt(alcoholWater)} ml alcool`].filter(Boolean);
+  $("water-sport").hidden = !extras.length;
+  $("water-sport").textContent = `dont ${extras.join(" · ")}`;
   $("water-total").textContent = fmt(data.total_water_ml);
   $("water-fill").style.width = Math.min(100, (data.total_water_ml / waterTarget) * 100) + "%";
+
+  facts = { kcal_goal, model, sportMin, sportWater, alcoholG, alcoholWater, pGoal };
 
   // ----- Columns: meals on the left, activities on the right (in expenditure mode)
   const activities = energy ? energy.activities || [] : [];
@@ -231,6 +236,76 @@ function renderProjection(model, eaten) {
   $("proj-left").title = `objectif de bilan ${signed(me.balance_goal)} kcal`;
 }
 
+// ---------- "i" buttons: how each number is computed ----------
+let facts = {}; // values from the last loadDay, used by the explanations
+const INFO = {
+  eaten() {
+    const { kcal_goal, model } = facts;
+    if (model) {
+      return ["Objectif = dépense prévue à minuit + bilan visé",
+        `= ${fmt(Math.round(model.projected))} ${signed(me.balance_goal)} = ${fmt(kcal_goal)} kcal.`,
+        "",
+        "Il bouge pendant la journée : chaque activité enregistrée augmente la dépense prévue, donc ce que tu peux manger.",
+        me.balance_goal < 0 ? "Bilan visé négatif : tu manges moins que tu ne dépenses, c'est ce qui fait perdre du poids." : ""].join("\n");
+    }
+    if (plan) {
+      return [`Calculé à partir de ton objectif « ${plan.label} » :`,
+        `métabolisme de base × vie quotidienne + bilan visé (${signed(plan.balance_goal)} kcal) = ${fmt(kcal_goal)} kcal.`,
+        "", "Le métabolisme de base vient de ton sexe, ton âge, ta taille et ton poids (formule de Mifflin-St Jeor)."].join("\n");
+    }
+    return [`Ton objectif est fixe : ${fmt(kcal_goal)} kcal par jour. Touche « sur … visés » pour le changer.`,
+      "", "Pour un objectif qui suit ta dépense réelle, branche Strava ou Garmin (menu du compte → Dépense énergétique)."].join("\n");
+  },
+  burned() {
+    const m = facts.model;
+    if (!m) return "La dépense du jour n'est pas disponible pour l'instant (Strava ou Garmin injoignable).";
+    if (me.energy_source === "garmin") {
+      return ["Total mesuré par ta montre Garmin jusqu'à maintenant (repos + activité).",
+        "", `Métabolisme : la part « repos » prévue sur la journée, ${fmt(Math.round(m.resting))} kcal. La barre avance avec l'heure.`].join("\n");
+    }
+    return [`Métabolisme : ce que ton corps dépense au repos et dans la vie quotidienne, ${fmt(Math.round(m.resting))} kcal sur la journée`,
+      `(métabolisme de base × ${fmtNum(me.life_factor ?? 1.2)} pour la vie quotidienne). La barre avance avec l'heure.`,
+      "", "Activités : les calories de tes activités Strava du jour.",
+      "", "Brûlé = métabolisme écoulé jusqu'à maintenant + activités."].join("\n");
+  },
+  projection() {
+    return ["Brûlé prévu : ce que tu auras dépensé à minuit si tu ne fais plus de sport.",
+      "Bilan : mangé − brûlé prévu. Négatif = tu manges moins que tu ne dépenses.",
+      `Encore possible : ce que tu peux encore manger en tenant ton bilan visé (${signed(me.balance_goal)} kcal).`].join("\n");
+  },
+  protein() {
+    const w = plan?.current_weight || me.weight_kg;
+    const mode = me.protein_mode || "auto";
+    const how = mode === "grams" ? `Objectif réglé à la main : ${fmt(facts.pGoal)} g par jour.`
+      : mode === "per_kg" ? `${fmtNum(me.protein_value)} g par kg × ${fmtKg(w)} kg = ${fmt(facts.pGoal)} g, recalculé à chaque pesée.`
+      : plan ? `Selon ton objectif « ${plan.label} » : ${fmtNum(plan.protein_auto_per_kg)} g par kg de poids = ${fmt(facts.pGoal)} g.`
+      : w ? `Par défaut : 1,6 g par kg de poids = ${fmt(facts.pGoal)} g.` : "Par défaut 100 g (renseigne ton poids pour un calcul en g/kg).";
+    return [how, "", "Le total additionne les protéines de chaque aliment (grammes × protéines pour 100 g).",
+      "Touche la carte pour changer l'objectif."].join("\n");
+  },
+  water() {
+    const { sportMin, sportWater, alcoholG, alcoholWater } = facts;
+    const target = [`Objectif de base : ${fmt(me.water_goal)} ml (touche la carte pour le changer).`];
+    if (sportWater) target.push(`+${fmt(sportWater)} ml pour ${sportMin} min de sport (500 ml par heure).`);
+    if (alcoholWater) target.push(`+${fmt(alcoholWater)} ml pour ${alcoholG} g d'alcool : l'alcool fait uriner davantage (environ 10 ml par gramme), il faut compenser.`);
+    return [...target, "",
+      "Ce qui compte : l'eau et toutes les boissons sans alcool (café, thé, lait, jus, soda…).",
+      "L'alcool ne compte pas, ni l'eau contenue dans les aliments (soupe, fruits) : elle est déjà prévue dans le repère des 2 L, dont environ 20 % vient de la nourriture.",
+    ].join("\n");
+  },
+  goal() {
+    return ["Bilan visé = (poids actuel − poids visé) × 7 700 kcal ÷ jours restants : 1 kg de masse corporelle ≈ 7 700 kcal.",
+      "", "Pour rester raisonnable, le rythme est plafonné à 1 % du poids par semaine et à −1 000 kcal par jour (+500 en prise de muscle).",
+      "", "Protéines : 2 g/kg en perte de poids (pour préserver le muscle), 1,8 g/kg en prise de muscle, 1,6 g/kg en maintien.",
+      "", "Tout est recalculé à chaque pesée."].join("\n");
+  },
+};
+const INFO_TITLES = { eaten: "Objectif de calories", burned: "Dépense du jour", projection: "Projection", protein: "Protéines",
+  water: "Eau", goal: "Ton objectif" };
+document.querySelectorAll(".info").forEach((b) => {
+  b.onclick = (e) => { e.stopPropagation(); notice(INFO[b.dataset.info](), INFO_TITLES[b.dataset.info]); };
+});
+
 // ---------- Photo -> analysis ----------
 document.querySelectorAll(".photo-input").forEach((input) => input.addEventListener("change", onPhoto));
 
@@ -339,7 +414,7 @@ function renderDraft() {
           body: JSON.stringify({ name: n, grams: it.fresh ? null : it.grams || null }),
         });
         if (it.estimatedFor !== n) return; // renamed meanwhile
-        Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g });
+        Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g, abv: est.abv || 0 });
         // a non-alcoholic drink also counts toward hydration
         draft.water_ml = Math.max(0, (draft.water_ml || 0) + (est.drink_ml || 0) - (it.drink_ml || 0));
         it.drink_ml = est.drink_ml || 0;
@@ -404,8 +479,9 @@ $("fix-form").onsubmit = async (e) => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: draft.title, water_ml: draft.water_ml || 0, comment,
-        items: draft.items.filter((it) => it.name.trim()).map(({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g, drink_ml }) =>
-          ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0, drink_ml: drink_ml || 0 })),
+        items: draft.items.filter((it) => it.name.trim()).map(({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g, drink_ml, abv }) =>
+          ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0,
+             drink_ml: drink_ml || 0, abv: abv || 0 })),
       }),
     });
     draft.title = res.title || draft.title;
@@ -1112,8 +1188,8 @@ async function refreshGoal() {
 
 // Features that can be turned off per account (account menu)
 function applyFeatures() {
-  $("protein-card").hidden = !me.show_protein;
-  $("protein-card").parentElement.classList.toggle("two", me.show_protein);
+  $("protein-card").closest(".card-wrap").hidden = !me.show_protein;
+  $("protein-card").closest(".minis").classList.toggle("two", me.show_protein);
   document.querySelectorAll(".when-weight").forEach((el) => (el.hidden = !me.show_weight));
   renderGoalCard();
 }

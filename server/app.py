@@ -30,14 +30,17 @@ MAX_SIDE = 1024  # the photo is downscaled: faster, and enough to recognise a di
 
 # Hydration: every non-alcoholic drink counts (the ~2 L/day guideline covers all drinks);
 # water inside food (soup, fruit) is already part of the ~20 % that comes from food, alcohol dehydrates.
-# The model gives each drink's volume (drink_ml); the server adds them up (see ask_model).
+# The model gives each drink's volume (drink_ml) and alcohol strength (abv); the server adds them up
+# (see ask_model) and raises the day's water target for the alcohol (see list_meals).
 DRINKS_RULE = """EAU ET BOISSONS :
 - water_ml = eau pure uniquement (plate ou gazeuse), en millilitres. L'eau pure ne va PAS dans items. 0 si pas d'eau.
 - Toute autre boisson va dans items avec ses calories (même ~0 pour un café noir ou un thé).
 - drink_ml (pour chaque élément de items) = son volume en millilitres si c'est une boisson NON alcoolisée
   (café, thé, infusion, lait, boisson végétale, jus, soda…), sinon 0.
 - drink_ml = 0 pour l'alcool (bière, vin, cidre, spiritueux, cocktail) et pour tout ce qui se mange,
-  y compris soupe, bouillon, fruits et yaourts."""
+  y compris soupe, bouillon, fruits et yaourts.
+- abv (pour chaque élément de items) = degré d'alcool en % vol. si c'est une boisson alcoolisée
+  (bière ~5, vin ~12, cidre ~5, champagne ~12, spiritueux ~40, cocktail ~15), sinon 0."""
 
 PROMPT = """Tu es un nutritionniste. Analyse la photo de ce repas.
 Liste chaque aliment visible séparément (ex : "riz blanc cuit", "poulet rôti", "sauce tomate").
@@ -70,8 +73,9 @@ SCHEMA = {
                     "carbs_100g": {"type": "number"},
                     "fat_100g": {"type": "number"},
                     "drink_ml": {"type": "number"},
+                    "abv": {"type": "number"},
                 },
-                "required": ["name", "grams", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g", "drink_ml"],
+                "required": ["name", "grams", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g", "drink_ml", "abv"],
             },
         },
     },
@@ -157,7 +161,11 @@ def _clean_item(it: dict) -> dict:
     for k in ("kcal_100g", "protein_100g", "carbs_100g", "fat_100g"):
         it[k] = max(0.0, round(float(it.get(k) or 0), 1))
     it["drink_ml"] = max(0, round(float(it.get("drink_ml") or 0)))
-    if ALCOHOL.search(it.get("name", "")) and not re.search(r"sans alcool|0[,.]?0 ?%", it.get("name", ""), re.I):
+    it["abv"] = min(80.0, max(0.0, round(float(it.get("abv") or 0), 1)))
+    alcohol_free = re.search(r"sans alcool|0[,.]?0 ?%", it.get("name", ""), re.I)
+    if alcohol_free:
+        it["abv"] = 0.0
+    if it["abv"] >= 1.2 or (ALCOHOL.search(it.get("name", "")) and not alcohol_free):
         it["drink_ml"] = 0  # alcohol dehydrates: never counted, even if the model says so
     elif it["drink_ml"]:
         it["grams"] = it["drink_ml"]  # a drink weighs about its volume (the model sometimes gives the tea leaves)
@@ -211,6 +219,7 @@ class Item(BaseModel):
     carbs_100g: float = 0
     fat_100g: float = 0
     drink_ml: float = 0  # volume counted toward hydration (non-alcoholic drinks)
+    abv: float = 0  # alcohol strength (% vol), raises the day's water target
 
 
 class Meal(BaseModel):
@@ -240,7 +249,8 @@ ITEM_PROMPT = """Tu es un nutritionniste. Donne les valeurs nutritionnelles de l
 (cuit pour les féculents et les viandes) : kcal_100g, protein_100g, carbs_100g, fat_100g.
 grams : {grams}
 name : reprends le nom donné, corrigé si besoin (court, en français).
-drink_ml : son volume en millilitres si c'est une boisson non alcoolisée (café, thé, lait, jus, soda…), sinon 0."""
+drink_ml : son volume en millilitres si c'est une boisson non alcoolisée (café, thé, lait, jus, soda…), sinon 0.
+abv : degré d'alcool en % vol. si c'est une boisson alcoolisée (bière ~5, vin ~12, spiritueux ~40), sinon 0."""
 
 
 class MealFix(BaseModel):
@@ -308,6 +318,10 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
         "total_water_ml": round(sum(m["water_ml"] for m in meals)),
         "total_protein_g": round(sum(
             i.get("grams", 0) * (i.get("protein_100g") or 0) / 100 for m in meals for i in m["items"]
+        )),
+        # grams of pure alcohol: volume × strength × ethanol density (0.789)
+        "total_alcohol_g": round(sum(
+            i.get("grams", 0) * (i.get("abv") or 0) / 100 * 0.789 for m in meals for i in m["items"]
         )),
         "meals": meals,
     }

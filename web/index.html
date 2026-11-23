@@ -262,12 +262,14 @@
     <section class="summary">
       <div id="cards" class="cards">
         <div class="card" id="card-eaten">
+          <button class="info" type="button" data-info="eaten" aria-label="Comment c'est calculé ?">i</button>
           <div class="card-label">Mangé</div>
           <div class="big"><span id="total">0</span> <small>kcal</small></div>
           <div class="bar"><div id="bar-fill"></div></div>
           <button id="goal-btn" class="sub link-like">sur <span id="goal">2000</span> visés</button>
         </div>
         <div class="card" id="card-burned" hidden>
+          <button class="info" type="button" data-info="burned" aria-label="Comment c'est calculé ?">i</button>
           <div class="card-label">Brûlé</div>
           <div class="big"><span id="burned">0</span> <small>kcal</small></div>
           <div class="mini-label">Métabolisme</div>
@@ -277,19 +279,26 @@
         </div>
       </div>
       <div class="cards two minis">
-        <button id="protein-card" class="card mini-card" type="button" aria-label="Protéines, toucher pour changer l'objectif">
-          <div class="card-label">💪 Protéines</div>
-          <div class="mid"><span id="protein-total">0</span> <small>/ <span id="protein-goal">100</span> g</small></div>
-          <div class="bar"><div id="protein-fill"></div></div>
-        </button>
-        <button id="water-gauge" class="card mini-card" type="button" aria-label="Eau, toucher pour changer l'objectif">
-          <div class="card-label">💧 Eau</div>
-          <div class="mid"><span id="water-total">0</span> <small>/ <span id="water-goal">2000</span> ml</small></div>
-          <div class="bar"><div id="water-fill"></div></div>
-          <div id="water-sport" class="sub" hidden></div>
-        </button>
+        <div class="card-wrap">
+          <button id="protein-card" class="card mini-card" type="button" aria-label="Protéines, toucher pour changer l'objectif">
+            <div class="card-label">💪 Protéines</div>
+            <div class="mid"><span id="protein-total">0</span> <small>/ <span id="protein-goal">100</span> g</small></div>
+            <div class="bar"><div id="protein-fill"></div></div>
+          </button>
+          <button class="info" type="button" data-info="protein" aria-label="Comment c'est calculé ?">i</button>
+        </div>
+        <div class="card-wrap">
+          <button id="water-gauge" class="card mini-card" type="button" aria-label="Eau, toucher pour changer l'objectif">
+            <div class="card-label">💧 Eau</div>
+            <div class="mid"><span id="water-total">0</span> <small>/ <span id="water-goal">2000</span> ml</small></div>
+            <div class="bar"><div id="water-fill"></div></div>
+            <div id="water-sport" class="sub" hidden></div>
+          </button>
+          <button class="info" type="button" data-info="water" aria-label="Comment c'est calculé ?">i</button>
+        </div>
       </div>
       <div id="goal-card" class="card goal-card" hidden>
+        <button class="info" type="button" data-info="goal" aria-label="Comment c'est calculé ?">i</button>
         <div class="goal-head">
           <span id="goal-title" class="card-label"></span>
           <span id="goal-days" class="goal-days"></span>
@@ -309,6 +318,7 @@
       <p id="energy-warn" class="hint warn-text" hidden></p>
 
       <div id="projection" class="card projection" hidden>
+        <button class="info" type="button" data-info="projection" aria-label="Comment c'est calculé ?">i</button>
         <div class="card-label">Projection à minuit</div>
         <div class="proj-row"><span>Brûlé prévu</span><b id="proj-burned"></b></div>
         <div class="proj-row"><span>Bilan si tu ne manges plus</span><b id="proj-balance"></b></div>
