@@ -3,7 +3,9 @@
 Snap a photo of your meal: a local AI (Ollama) recognises the foods and estimates grams and calories.
 You fix anything that's off, save it, and the app keeps your daily total.
 
-It tracks water too: a photo of a glass or bottle estimates the volume and fills the blue gauge.
+It tracks hydration too: plain water and every non-alcoholic drink (coffee, tea, milk, juice, soda…) fill the blue gauge.
+Alcohol and water contained in food (soup, fruit) don't count: the ~2 L/day guideline is for drinks, food already
+provides about 20 % of daily water.
 
 - `server/app.py`: FastAPI API (photo and text analysis via Ollama, meals, water)
 - `server/auth.py`: accounts (e-mail + password), cookie sessions

@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import os
+import re
 from datetime import date, datetime
 
 import httpx
@@ -27,6 +28,17 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:9b")
 MAX_UPLOAD = 20 * 1024 * 1024  # uploaded photo: 20 MB max
 MAX_SIDE = 1024  # the photo is downscaled: faster, and enough to recognise a dish
 
+# Hydration: every non-alcoholic drink counts (the ~2 L/day guideline covers all drinks);
+# water inside food (soup, fruit) is already part of the ~20 % that comes from food, alcohol dehydrates.
+# The model gives each drink's volume (drink_ml); the server adds them up (see ask_model).
+DRINKS_RULE = """EAU ET BOISSONS :
+- water_ml = eau pure uniquement (plate ou gazeuse), en millilitres. L'eau pure ne va PAS dans items. 0 si pas d'eau.
+- Toute autre boisson va dans items avec ses calories (même ~0 pour un café noir ou un thé).
+- drink_ml (pour chaque élément de items) = son volume en millilitres si c'est une boisson NON alcoolisée
+  (café, thé, infusion, lait, boisson végétale, jus, soda…), sinon 0.
+- drink_ml = 0 pour l'alcool (bière, vin, cidre, spiritueux, cocktail) et pour tout ce qui se mange,
+  y compris soupe, bouillon, fruits et yaourts."""
+
 PROMPT = """Tu es un nutritionniste. Analyse la photo de ce repas.
 Liste chaque aliment visible séparément (ex : "riz blanc cuit", "poulet rôti", "sauce tomate").
 Pour chacun, estime :
@@ -37,10 +49,9 @@ Pour chacun, estime :
 Noms en français, courts et précis. Si la photo ne montre pas de nourriture, renvoie une liste vide.
 Donne aussi un titre court pour le repas.
 
-EAU : water_ml = volume d'eau (plate ou gazeuse, sans sucre) visible, en millilitres. Ne mets PAS l'eau dans items.
-Estime le volume d'après le contenant et son niveau de remplissage (verre standard ~200-250 ml plein, grand verre ~330 ml,
-mug ~300 ml, petite bouteille 500 ml, grande bouteille 1,5 L). 0 s'il n'y a pas d'eau.
-Les autres boissons (soda, jus, lait, café sucré, alcool…) vont dans items avec leurs calories."""
+""" + DRINKS_RULE + """
+Estime les volumes d'après le contenant et son niveau de remplissage (verre standard ~200-250 ml plein, grand verre ~330 ml,
+tasse à café ~100 ml, expresso ~40 ml, mug ~300 ml, canette 330 ml, petite bouteille 500 ml, grande bouteille 1,5 L)."""
 
 SCHEMA = {
     "type": "object",
@@ -58,8 +69,9 @@ SCHEMA = {
                     "protein_100g": {"type": "number"},
                     "carbs_100g": {"type": "number"},
                     "fat_100g": {"type": "number"},
+                    "drink_ml": {"type": "number"},
                 },
-                "required": ["name", "grams", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g"],
+                "required": ["name", "grams", "kcal_100g", "protein_100g", "carbs_100g", "fat_100g", "drink_ml"],
             },
         },
     },
@@ -104,9 +116,9 @@ Pour chacun, estime :
 Noms en français, courts et précis. Si le texte ne parle pas de nourriture ni de boisson, renvoie une liste vide.
 Donne aussi un titre court pour le repas.
 
-EAU : water_ml = volume d'eau plate ou gazeuse (sans sucre) citée, en millilitres. Ne mets PAS l'eau dans items.
-Sans volume précisé : verre ~250 ml, grand verre ~330 ml, petite bouteille 500 ml, grande bouteille 1,5 L. 0 si pas d'eau.
-Les autres boissons (soda, jus, lait, café sucré, alcool…) vont dans items avec leurs calories.
+""" + DRINKS_RULE + """
+Sans volume précisé : verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
+canette 330 ml, petite bouteille 500 ml, grande bouteille 1,5 L.
 
 Description de l'utilisateur :
 """
@@ -136,17 +148,37 @@ async def _chat(message: dict, schema: dict) -> dict:
         raise HTTPException(502, "Réponse du modèle invalide") from exc
 
 
+ALCOHOL = re.compile(r"\b(bières?|vins?|cidre|champagne|prosecco|crémant|rosé|whisky|rhum|vodka|gin|tequila|pastis|"
+                     r"apéritif|cocktail|spritz|sangria|liqueur|cognac|armagnac|calvados|kir|mojito|punch|porto|martini)\b", re.I)
+
+
 def _clean_item(it: dict) -> dict:
     it["grams"] = max(0, round(it.get("grams") or 0))
     for k in ("kcal_100g", "protein_100g", "carbs_100g", "fat_100g"):
         it[k] = max(0.0, round(float(it.get(k) or 0), 1))
+    it["drink_ml"] = max(0, round(float(it.get("drink_ml") or 0)))
+    if ALCOHOL.search(it.get("name", "")) and not re.search(r"sans alcool|0[,.]?0 ?%", it.get("name", ""), re.I):
+        it["drink_ml"] = 0  # alcohol dehydrates: never counted, even if the model says so
+    elif it["drink_ml"]:
+        it["grams"] = it["drink_ml"]  # a drink weighs about its volume (the model sometimes gives the tea leaves)
     return it
 
 
+PLAIN_WATER = re.compile(r"^(grand |petit )?(verre |bouteille |carafe )?(d'|d’)?eau( plate| gazeuse| pétillante| minérale| du robinet)?$", re.I)
+
+
 async def ask_model(message: dict) -> dict:
+    """Analysis -> cleaned items, and water_ml = plain water + every non-alcoholic drink."""
     result = await _chat(message, SCHEMA)
-    result["items"] = [_clean_item(it) for it in result.get("items", [])]
-    result["water_ml"] = max(0, round(result.get("water_ml", 0) / 10) * 10)
+    plain = max(0.0, float(result.get("water_ml") or 0))
+    items = []
+    for it in map(_clean_item, result.get("items", [])):
+        if PLAIN_WATER.match(it["name"].strip()) and it["kcal_100g"] < 5:
+            plain = plain or (it["drink_ml"] or it["grams"])  # water put in items by mistake
+            continue
+        items.append(it)
+    result["items"] = items
+    result["water_ml"] = round((plain + sum(it["drink_ml"] for it in items)) / 10) * 10
     return result
 
 
@@ -178,6 +210,7 @@ class Item(BaseModel):
     protein_100g: float = 0
     carbs_100g: float = 0
     fat_100g: float = 0
+    drink_ml: float = 0  # volume counted toward hydration (non-alcoholic drinks)
 
 
 class Meal(BaseModel):
@@ -192,7 +225,10 @@ Applique sa correction : remplace, retire ou ajoute les aliments cités, change 
 Garde tels quels les aliments qu'il ne mentionne pas (mêmes noms, grammes et valeurs).
 Pour chaque aliment nouveau ou modifié, recalcule grams (portion habituelle si non précisée, ou la quantité de l'aliment remplacé)
 et les valeurs pour 100 g tel que consommé : kcal_100g, protein_100g, carbs_100g, fat_100g (cuit pour les féculents).
-Mets à jour le titre si le plat a changé. EAU : water_ml = eau plate ou gazeuse uniquement (pas dans items).
+Mets à jour le titre si le plat a changé.
+""" + DRINKS_RULE.replace("{", "{{").replace("}", "}}") + """
+Sans volume précisé : verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
+canette 330 ml, petite bouteille 500 ml, grande bouteille 1,5 L. Si la correction ajoute de l'eau, ajoute-la à water_ml.
 Renvoie l'analyse complète corrigée.
 
 Analyse actuelle :
@@ -203,7 +239,8 @@ Correction de l'utilisateur : {comment}"""
 ITEM_PROMPT = """Tu es un nutritionniste. Donne les valeurs nutritionnelles de l'aliment « {name} » pour 100 g tel qu'il est consommé
 (cuit pour les féculents et les viandes) : kcal_100g, protein_100g, carbs_100g, fat_100g.
 grams : {grams}
-name : reprends le nom donné, corrigé si besoin (court, en français)."""
+name : reprends le nom donné, corrigé si besoin (court, en français).
+drink_ml : son volume en millilitres si c'est une boisson non alcoolisée (café, thé, lait, jus, soda…), sinon 0."""
 
 
 class MealFix(BaseModel):
@@ -215,9 +252,10 @@ class MealFix(BaseModel):
 
 @app.post("/api/analyze-fix")
 async def analyze_fix(body: MealFix, user=Depends(current_user)):
+    """Correct a meal from a comment ("no rice, it was pasta") and recompute everything."""
     ai_limit.check(f"user:{user['id']}")
-    """Corrige un repas d'après un commentaire (« pas de riz mais des pâtes ») et recalcule tout."""
-    current = json.dumps({"title": body.title, "water_ml": body.water_ml,
+    plain = max(0.0, body.water_ml - sum(i.drink_ml for i in body.items))  # drinks are counted per item
+    current = json.dumps({"title": body.title, "water_ml": plain,
                           "items": [i.model_dump() for i in body.items]}, ensure_ascii=False)
     return await ask_model({"role": "user", "content": FIX_PROMPT.format(current=current, comment=body.comment.strip())})
 
@@ -229,8 +267,8 @@ class ItemQuery(BaseModel):
 
 @app.post("/api/estimate-item")
 async def estimate_item(body: ItemQuery, user=Depends(current_user)):
+    """Nutrition values of a food added or renamed by hand."""
     ai_limit.check(f"user:{user['id']}")
-    """Valeurs nutritionnelles d'un aliment ajouté ou renommé à la main."""
     grams = (f"garde {round(body.grams)}" if body.grams
              else "la portion habituelle en grammes (ex : pomme 150, yaourt 125, assiette de pâtes cuites 250)")
     it = _clean_item(await _chat({"role": "user", "content": ITEM_PROMPT.format(name=body.name.strip(), grams=grams)},

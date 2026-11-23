@@ -303,6 +303,12 @@ async function analyze(request, { image, text }) {
   }
 }
 
+function renderDraftWater() {
+  $("water-row").hidden = !(draft.water_ml > 0);
+  $("add-water").hidden = draft.water_ml > 0;
+  $("water-ml").value = draft.water_ml || "";
+}
+
 function renderDraft() {
   $("analyzing").hidden = true;
   $("result").hidden = false;
@@ -334,6 +340,10 @@ function renderDraft() {
         });
         if (it.estimatedFor !== n) return; // renamed meanwhile
         Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g });
+        // a non-alcoholic drink also counts toward hydration
+        draft.water_ml = Math.max(0, (draft.water_ml || 0) + (est.drink_ml || 0) - (it.drink_ml || 0));
+        it.drink_ml = est.drink_ml || 0;
+        renderDraftWater();
         if (it.fresh) it.grams = est.grams || it.grams;
         it.fresh = false;
         if (!row.isConnected) return renderDraft(); // list redrawn during the estimate
@@ -349,13 +359,15 @@ function renderDraft() {
     };
     grams.oninput = () => { it.grams = Number(grams.value) || 0; refresh(); };
     k100.oninput = () => { it.kcal_100g = Number(k100.value) || 0; refresh(); };
-    row.querySelector(".remove").onclick = () => { draft.items.splice(idx, 1); renderDraft(); };
+    row.querySelector(".remove").onclick = () => {
+      draft.water_ml = Math.max(0, (draft.water_ml || 0) - (it.drink_ml || 0));
+      draft.items.splice(idx, 1);
+      renderDraft();
+    };
     refresh();
     box.appendChild(row);
   });
-  $("water-row").hidden = !(draft.water_ml > 0);
-  $("add-water").hidden = draft.water_ml > 0;
-  $("water-ml").value = draft.water_ml || "";
+  renderDraftWater();
   updateDraftTotal();
 }
 $("water-ml").oninput = (e) => (draft.water_ml = Number(e.target.value) || 0);
@@ -392,8 +404,8 @@ $("fix-form").onsubmit = async (e) => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: draft.title, water_ml: draft.water_ml || 0, comment,
-        items: draft.items.filter((it) => it.name.trim()).map(({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g }) =>
-          ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0 })),
+        items: draft.items.filter((it) => it.name.trim()).map(({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g, drink_ml }) =>
+          ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0, drink_ml: drink_ml || 0 })),
       }),
     });
     draft.title = res.title || draft.title;
