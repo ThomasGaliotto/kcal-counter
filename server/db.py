@@ -39,6 +39,8 @@ USER_COLUMNS = {
     "goal_date": "TEXT",                               # horizon (AAAA-MM-JJ)
     "goal_start_weight": "REAL",
     "goal_start_date": "TEXT",
+    "show_protein": "INTEGER NOT NULL DEFAULT 1",      # fonctionnalités affichées (réglables par compte)
+    "show_weight": "INTEGER NOT NULL DEFAULT 1",       # objectif de poids, pesées, courbe
     "strava_athlete": "TEXT",
     "strava_access": "TEXT",
     "strava_refresh": "TEXT",

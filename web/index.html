@@ -39,10 +39,15 @@
       <div><strong id="account-name"></strong><div id="account-email" class="muted"></div></div>
       <button id="account-close" class="remove" aria-label="Fermer">×</button>
     </div>
-    <button id="open-goal" class="sheet-btn">🎯 Mon objectif</button>
-    <button id="open-weights" class="sheet-btn">📈 Évolution du poids</button>
+    <button id="open-goal" class="sheet-btn when-weight">🎯 Mon objectif</button>
+    <button id="open-weights" class="sheet-btn when-weight">📈 Évolution du poids</button>
     <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
     <button id="open-invites" class="sheet-btn" hidden>✉️ Inviter quelqu'un</button>
+    <div class="features">
+      <div class="features-title">Fonctionnalités</div>
+      <label class="switch-row"><span>💪 Protéines</span><input id="feat-protein" type="checkbox" role="switch"></label>
+      <label class="switch-row"><span>🎯 Objectif de poids et pesées</span><input id="feat-weight" type="checkbox" role="switch"></label>
+    </div>
     <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
   </dialog>

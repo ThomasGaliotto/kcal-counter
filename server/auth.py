@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
-    "protein_mode", "protein_value",
+    "protein_mode", "protein_value", "show_protein", "show_weight",
 )
 
 
@@ -59,6 +59,7 @@ def is_admin(user) -> bool:
 
 def _public(user) -> dict:
     data = {k: user[k] for k in PUBLIC_FIELDS}
+    data["show_protein"], data["show_weight"] = bool(user["show_protein"]), bool(user["show_weight"])
     data["is_admin"] = is_admin(user)
     data["strava_connected"] = bool(user["strava_refresh"])
     data["strava_available"] = bool(os.environ.get("STRAVA_CLIENT_ID"))
@@ -121,6 +122,8 @@ class Profile(BaseModel):
     height_cm: float | None = Field(None, ge=50, le=260)
     weight_kg: float | None = Field(None, ge=20, le=400)
     life_factor: float | None = Field(None, ge=1.0, le=2.0)
+    show_protein: bool | None = None
+    show_weight: bool | None = None
 
 
 class PasswordChange(BaseModel):

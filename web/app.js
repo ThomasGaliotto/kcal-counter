@@ -785,6 +785,8 @@ $("account-btn").onclick = () => {
   $("account-name").textContent = me.name;
   $("account-email").textContent = me.email;
   $("open-invites").hidden = !me.is_admin;
+  $("feat-protein").checked = me.show_protein;
+  $("feat-weight").checked = me.show_weight;
   $("account").showModal();
 };
 $("account-close").onclick = () => $("account").close();
@@ -1096,9 +1098,38 @@ async function refreshGoal() {
   me = res;
 }
 
+// Fonctionnalités désactivables par compte (menu du compte)
+function applyFeatures() {
+  $("protein-card").hidden = !me.show_protein;
+  $("protein-card").parentElement.classList.toggle("two", me.show_protein);
+  document.querySelectorAll(".when-weight").forEach((el) => (el.hidden = !me.show_weight));
+  renderGoalCard();
+}
+$("feat-protein").onchange = async (e) => {
+  try { me = await api("/api/me", jsonPatch({ show_protein: e.target.checked })); applyFeatures(); }
+  catch (err) { e.target.checked = !e.target.checked; notice(err.message, "Erreur"); }
+};
+$("feat-weight").onchange = async (e) => {
+  const on = e.target.checked;
+  if (!on && plan) {
+    const ok = await confirmBox("Ton objectif en cours sera supprimé. Tes pesées sont gardées, tu les retrouveras en réactivant.",
+      { title: "Désactiver l'objectif ?", ok: "Désactiver" });
+    if (!ok) { e.target.checked = true; return; }
+  }
+  try {
+    if (!on && plan) await api("/api/goal", { method: "DELETE" });
+    me = await api("/api/me", jsonPatch({ show_weight: on }));
+    await refreshGoal();
+    applyFeatures();
+    loadDay();
+  } catch (err) { e.target.checked = !on; notice(err.message, "Erreur"); }
+};
+const jsonPatch = (body) => ({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
 function renderGoalCard() {
-  $("goal-card").hidden = !plan;
-  $("goal-empty").hidden = !!plan;
+  const showGoal = me?.show_weight !== false;
+  $("goal-card").hidden = !plan || !showGoal;
+  $("goal-empty").hidden = !!plan || !showGoal;
   if (!plan) return;
   $("goal-title").textContent = { lose: "📉 ", maintain: "⚖️ ", gain: "💪 " }[plan.type] + plan.label;
   $("goal-days").textContent = plan.days_left != null ? `J−${plan.days_left}` : "";
@@ -1115,7 +1146,8 @@ function renderGoalCard() {
   $("goal-fill").parentElement.hidden = plan.progress == null;
   $("goal-fill").style.width = Math.round((plan.progress || 0) * 100) + "%";
   const rate = plan.weekly_change_kg ? `${plan.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(plan.weekly_change_kg))} kg/sem · ` : "";
-  $("goal-rate").textContent = `${rate}bilan ${signed(plan.balance_goal)} kcal/j · ${plan.protein_goal ?? "?"} g prot.${plan.protein_manual ? " (réglé à la main)" : ""}`;
+  const prot = me.show_protein ? ` · ${plan.protein_goal ?? "?"} g prot.${plan.protein_manual ? " (réglé à la main)" : ""}` : "";
+  $("goal-rate").textContent = `${rate}bilan ${signed(plan.balance_goal)} kcal/j${prot}`;
   $("goal-msg").hidden = !plan.message;
   $("goal-msg").textContent = plan.message || "";
   $("goal-msg").classList.toggle("warn-text", !!plan.capped || /dépassé/.test(plan.message || ""));
@@ -1451,6 +1483,7 @@ async function startApp() {
   $("account-btn").textContent = (me.name || "?").trim().charAt(0).toUpperCase();
   day = todayISO();
   try { await refreshGoal(); } catch {} // sans objectif ou hors ligne : on continue
+  applyFeatures();
   loadDay().catch(showError);
 }
 function showError(err) {
