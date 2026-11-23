@@ -250,8 +250,8 @@ const INFO = {
     }
     if (plan) {
       return [`Calculé à partir de ton objectif « ${plan.label} » :`,
-        `métabolisme de base × vie quotidienne + bilan visé (${signed(plan.balance_goal)} kcal) = ${fmt(kcal_goal)} kcal.`,
-        "", "Le métabolisme de base vient de ton sexe, ton âge, ta taille et ton poids (formule de Mifflin-St Jeor)."].join("\n");
+        `dépense hors sport + bilan visé (${signed(plan.balance_goal)} kcal) = ${fmt(kcal_goal)} kcal.`,
+        "", metabolismText()].join("\n");
     }
     return [`Ton objectif est fixe : ${fmt(kcal_goal)} kcal par jour. Touche « sur … visés » pour le changer.`,
       "", "Pour un objectif qui suit ta dépense réelle, branche Strava ou Garmin (menu du compte → Dépense énergétique)."].join("\n");
@@ -263,8 +263,9 @@ const INFO = {
       return ["Total mesuré par ta montre Garmin jusqu'à maintenant (repos + activité).",
         "", `Métabolisme : la part « repos » prévue sur la journée, ${fmt(Math.round(m.resting))} kcal. La barre avance avec l'heure.`].join("\n");
     }
-    return [`Métabolisme : ce que ton corps dépense au repos et dans la vie quotidienne, ${fmt(Math.round(m.resting))} kcal sur la journée`,
-      `(métabolisme de base × ${fmtNum(me.life_factor ?? 1.2)} pour la vie quotidienne). La barre avance avec l'heure.`,
+    return [`Métabolisme : ce que ton corps dépense au repos et dans la vie quotidienne, ${fmt(Math.round(m.resting))} kcal sur la journée.`,
+      "La barre avance avec l'heure.",
+      "", metabolismText(),
       "", "Activités : les calories de tes activités Strava du jour.",
       "", "Brûlé = métabolisme écoulé jusqu'à maintenant + activités."].join("\n");
   },
@@ -300,10 +301,27 @@ const INFO = {
       "", "Tout est recalculé à chaque pesée."].join("\n");
   },
 };
+// How the expenditure outside sport is computed, from /api/metabolism
+function metabolismText() {
+  const m = metabolismInfo;
+  if (!m || !m.bmr) return "Renseigne ton profil (menu du compte → Dépense énergétique) pour calculer ton métabolisme.";
+  const formula = m.formula === "katch"
+    ? `Métabolisme de base : ${fmt(m.bmr)} kcal, d'après ta masse maigre (${fmtNum(m.body_fat_pct)} % de graisse ${m.body_fat_source === "measured" ? "mesuré" : "estimé d'après ta silhouette"}, formule de Katch-McArdle) : le muscle brûle plus que la graisse.`
+    : `Métabolisme de base : ${fmt(m.bmr)} kcal, d'après ton sexe, ton âge, ta taille et ton poids (formule de Mifflin-St Jeor).`;
+  const c = m.calibration;
+  const calib = c.status === "ok" && c.enabled && c.factor !== 1
+    ? ` × ${fmtNum(c.factor)} (calibrage d'après tes pesées : ton corps dépense ${Math.round(Math.abs(c.factor - 1) * 100)} % de ${c.factor > 1 ? "plus" : "moins"} que la formule)`
+    : "";
+  return [formula, `Dépense hors sport = ${fmt(m.bmr)} × ${fmtNum(m.life_factor)} (vie quotidienne)${calib} = ${fmt(m.daily)} kcal.`].join("\n");
+}
 const INFO_TITLES = { eaten: "Objectif de calories", burned: "Dépense du jour", projection: "Projection", protein: "Protéines",
   water: "Eau", goal: "Ton objectif" };
 document.querySelectorAll(".info").forEach((b) => {
-  b.onclick = (e) => { e.stopPropagation(); notice(INFO[b.dataset.info](), INFO_TITLES[b.dataset.info]); };
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    if (["eaten", "burned"].includes(b.dataset.info)) metabolismInfo = await api("/api/metabolism").catch(() => metabolismInfo);
+    notice(INFO[b.dataset.info](), INFO_TITLES[b.dataset.info]);
+  };
 });
 
 // ---------- Photo -> analysis ----------
@@ -908,20 +926,113 @@ $("change-password").onclick = () => {
 // ---------- Settings: energy expenditure ----------
 const sourceValue = () => ($("settings-form").querySelector("input[name=source]:checked") || {}).value || "none";
 
+// Silhouettes 1 (very lean) … 5 (heavy) with their visual body fat estimate.
+// Kept in sync with BODY_FAT in server/metabolism.py.
+const MORPHOLOGY = {
+  m: { fat: [10, 15, 20, 26, 33], label: ["Très sec", "Athlétique", "Moyen", "Enrobé", "Fort"] },
+  f: { fat: [18, 23, 28, 34, 41], label: ["Très sèche", "Athlétique", "Moyenne", "Enrobée", "Forte"] },
+};
+let morphoLevel = 0; // 0 = not chosen
+let metabolismInfo = null; // last /api/metabolism answer (calibration details)
+
+// Front-view silhouette drawn from a few widths: shoulders, chest, waist, hips, limbs.
+function silhouetteSVG(sex, level) {
+  const i = level - 1;
+  const P = sex === "f"
+    ? { S: [12, 12.5, 13, 14.5, 16.5], C: [11, 12, 12.5, 14.5, 17], W: [8, 9, 10.5, 13.5, 16.5], H: [12.5, 13.5, 14.5, 17, 19.5], A: [3.4, 4, 4.4, 5.2, 6.2], L: [6.5, 7.5, 8.2, 9.6, 11.5] }
+    : { S: [14, 16.5, 15.5, 16.5, 18], C: [12.5, 15, 14, 16, 18.5], W: [9.5, 11, 12.5, 15.5, 18.5], H: [11, 12, 12.8, 15, 17.5], A: [3.8, 5.2, 4.8, 5.6, 6.6], L: [6.5, 8.2, 8, 9.4, 11] };
+  const [S, C, W, H, A, L] = ["S", "C", "W", "H", "A", "L"].map((k) => P[k][i]);
+  const pts = [[3.5, 21], [S, 27], [C, 40], [W, 56], [H, 70]];
+  const right = pts.map(([x, y]) => [30 + x, y]), left = pts.map(([x, y]) => [30 - x, y]).reverse();
+  const ring = [...right, ...left];
+  let d = `M${ring[0][0]},${ring[0][1]}`;
+  for (let k = 1; k < ring.length; k++) { // smooth curve through midpoints
+    const [x, y] = ring[k], [px, py] = ring[k - 1];
+    d += ` Q${px},${py} ${(px + x) / 2},${(py + y) / 2}`;
+  }
+  d += ` L${ring[ring.length - 1][0]},${ring[ring.length - 1][1]} Z`;
+  const legX = H - L / 2 - 0.3;
+  const armEnd = Math.max(W, H) + A / 2 + 1.2; // arms hang just outside the waist and hips
+  return `<svg viewBox="0 0 60 122" aria-hidden="true">
+    <circle cx="30" cy="11" r="7"/>
+    <path d="${d}"/>
+    <g stroke="currentColor" stroke-linecap="round" fill="none">
+      <line x1="${30 - S + A / 2}" y1="30" x2="${30 - armEnd}" y2="66" stroke-width="${A}"/>
+      <line x1="${30 + S - A / 2}" y1="30" x2="${30 + armEnd}" y2="66" stroke-width="${A}"/>
+      <line x1="${30 - legX}" y1="72" x2="${30 - 4.5}" y2="116" stroke-width="${L}"/>
+      <line x1="${30 + legX}" y1="72" x2="${30 + 4.5}" y2="116" stroke-width="${L}"/>
+    </g>
+  </svg>`;
+}
+
+function renderMorpho() {
+  const sex = $("set-sex").value || "m";
+  const box = $("morpho");
+  box.innerHTML = "";
+  MORPHOLOGY[sex].fat.forEach((fat, i) => {
+    const level = i + 1;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "morpho-opt";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(level === morphoLevel));
+    b.innerHTML = `${silhouetteSVG(sex, level)}<b></b><small>~${fat} %</small>`;
+    b.querySelector("b").textContent = MORPHOLOGY[sex].label[i];
+    b.onclick = () => { morphoLevel = morphoLevel === level ? 0 : level; renderMorpho(); renderSettingsVisibility(); };
+    box.append(b);
+  });
+}
+
+const lifeValue = () => Number(($("settings-form").querySelector("input[name=life]:checked") || {}).value || 1.2);
+
+// Same formulas as server/metabolism.py, on the values being edited
 function bmrPreview() {
   const sex = $("set-sex").value, by = +$("set-birth").value, h = +$("set-height").value, w = +$("set-weight").value;
-  if (!sex || !by || !h || !w) return "Renseigne ton profil pour calculer ton métabolisme de base.";
-  const bmr = 10 * w + 6.25 * h - 5 * (new Date().getFullYear() - by) + (sex === "m" ? 5 : -161);
-  const life = +$("set-life").value;
-  return `Métabolisme de base : ${fmt(Math.round(bmr))} kcal/jour` +
-    (life > 1 ? ` · avec la vie quotidienne : ${fmt(Math.round(bmr * life))} kcal/jour, + tes activités Strava.` : ", + tes activités Strava.");
+  const measured = Number($("set-fat").value) || 0;
+  const fat = measured || (morphoLevel && sex ? MORPHOLOGY[sex].fat[morphoLevel - 1] : 0);
+  let bmr, how;
+  if (w && fat) {
+    bmr = 370 + 21.6 * w * (1 - fat / 100);
+    how = `formule de Katch-McArdle, avec ${fmtNum(fat)} % de graisse ${measured ? "mesuré" : "estimé d'après ta silhouette"}`;
+  } else if (sex && by && h && w) {
+    bmr = 10 * w + 6.25 * h - 5 * (new Date().getFullYear() - by) + (sex === "m" ? 5 : -161);
+    how = "formule de Mifflin-St Jeor (choisis une silhouette ou ton % de graisse pour tenir compte de ta morphologie)";
+  } else {
+    return "Renseigne ton profil pour calculer ton métabolisme de base.";
+  }
+  const c = metabolismInfo?.calibration;
+  const factor = $("set-calib").checked && c?.status === "ok" ? c.suggested_factor : 1;
+  const daily = bmr * lifeValue() * factor;
+  return `Métabolisme de base : ${fmt(Math.round(bmr))} kcal/jour (${how}).\n` +
+    `Dépense hors sport : ${fmt(Math.round(daily))} kcal/jour` +
+    (factor !== 1 ? ` (calibrage ${signed(Math.round((factor - 1) * 100))} % compris)` : "") +
+    (sourceValue() === "strava" ? ", + tes activités Strava." : ".");
+}
+
+function calibrationText(c) {
+  if (!c) return "";
+  if (c.status === "no_profile") return "Renseigne ton profil pour activer le calibrage.";
+  if (c.status === "ok") {
+    const pct = Math.round((c.suggested_factor - 1) * 100);
+    const trend = `${c.weekly_change_kg > 0 ? "+" : c.weekly_change_kg < 0 ? "−" : ""}${fmtKg(Math.abs(c.weekly_change_kg))} kg/semaine`;
+    return `Sur 4 semaines : ${fmt(c.mean_intake)} kcal mangées par jour en moyenne et ${trend}. ` +
+      `Ta dépense réelle est donc d'environ ${fmt(c.real_expenditure)} kcal/jour, contre ${fmt(c.model_expenditure)} prévues par la formule ` +
+      `: ${pct === 0 ? "la formule tombe juste" : `correction de ${signed(pct)} %`}${c.capped ? " (plafonnée à ±20 %)" : ""}.` +
+      (c.enabled ? "" : " Désactivé : la formule seule est utilisée.");
+  }
+  return `Il faut 3 semaines de données : au moins ${c.needed_days} jours de repas notés et 3 pesées étalées sur 2 semaines. ` +
+    `Pour l'instant : ${c.days_logged} jours notés, ${c.weighins} pesée${c.weighins > 1 ? "s" : ""}.`;
 }
 
 function renderSettingsVisibility() {
   const src = sourceValue();
   document.querySelector(".when-energy").hidden = src === "none";
-  document.querySelector(".when-strava").hidden = src !== "strava";
+  document.querySelector(".when-profile").hidden = src === "garmin"; // the watch measures it
   $("bmr-preview").textContent = bmrPreview();
+  $("life-hint").textContent = src === "strava"
+    ? "Hors sport : tes activités Strava s'ajoutent à part."
+    : "Si tu fais du sport sans l'enregistrer sur Strava, choisis un niveau au-dessus.";
+  $("calib-status").textContent = calibrationText(metabolismInfo?.calibration);
   const warn = $("source-warning");
   warn.hidden = true;
   if (src === "strava" && !me.strava_connected) {
@@ -1103,8 +1214,15 @@ function openSettings() {
   $("set-birth").value = me.birth_year || "";
   $("set-height").value = me.height_cm || "";
   $("set-weight").value = me.weight_kg || "";
-  $("set-life").value = String(me.life_factor ?? 1.2);
-  if (!$("set-life").value) $("set-life").value = "1.2";
+  const lifeInputs = [...f.querySelectorAll("input[name=life]")];
+  const life = me.life_factor ?? 1.2; // closest profile (older accounts may have 1.0)
+  lifeInputs.reduce((a, b) => (Math.abs(b.value - life) < Math.abs(a.value - life) ? b : a)).checked = true;
+  morphoLevel = me.morphology || 0;
+  $("set-fat").value = me.body_fat_pct || "";
+  $("set-calib").checked = me.calibrate;
+  renderMorpho();
+  metabolismInfo = null;
+  api("/api/metabolism").then((m) => { metabolismInfo = m; renderSettingsVisibility(); }).catch(() => {});
   $("settings-error").hidden = true;
   renderSettingsVisibility();
   renderConnections();
@@ -1116,8 +1234,16 @@ async function saveSettings(close = true) {
   const num = (id) => ($(id).value === "" ? null : Number($(id).value));
   const body = {
     energy_source: sourceValue(),
-    life_factor: Number($("set-life").value),
+    life_factor: lifeValue(),
+    morphology: morphoLevel,
+    body_fat_pct: Number($("set-fat").value) || 0,
+    calibrate: $("set-calib").checked,
   };
+  if (body.body_fat_pct && (body.body_fat_pct < 3 || body.body_fat_pct > 70)) {
+    $("settings-error").textContent = "Le % de graisse doit être entre 3 et 70.";
+    $("settings-error").hidden = false;
+    return false;
+  }
   if (!plan) body.balance_goal = num("set-balance") ?? me.balance_goal;
   // only send the profile if filled in (empty fields don't erase it)
   if ($("set-sex").value) body.sex = $("set-sex").value;
@@ -1126,7 +1252,11 @@ async function saveSettings(close = true) {
   }
   try {
     me = await api("/api/me", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (close) { $("settings").close(); loadDay(); }
+    if (close) {
+      $("settings").close();
+      try { await refreshGoal(); } catch {} // the profile changes the goal's calorie target
+      loadDay();
+    }
     return true;
   } catch (err) {
     $("settings-error").textContent = err.message;
@@ -1138,6 +1268,7 @@ async function saveSettings(close = true) {
 $("open-settings").onclick = openSettings;
 $("settings-close").onclick = () => $("settings").close();
 $("settings-form").addEventListener("input", renderSettingsVisibility);
+$("set-sex").addEventListener("change", renderMorpho);
 $("settings-form").onsubmit = (e) => { e.preventDefault(); saveSettings(); };
 
 function handleOAuthReturn() {

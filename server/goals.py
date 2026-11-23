@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .auth import _public, current_user
 from .db import db
-from .energy import bmr
+from .metabolism import daily_base
 
 router = APIRouter(prefix="/api")
 
@@ -119,9 +119,9 @@ def plan_for(user) -> dict | None:
     else:
         plan["progress"] = None
     plan.update(protein_target(user, weight, plan))
-    # kcal goal without measured expenditure: BMR × daily activity + target balance
-    base = bmr({**dict(user), "weight_kg": weight or user["weight_kg"]})
-    plan["kcal_goal"] = round(base * (user["life_factor"] or 1.2) + plan["balance_goal"]) if base else None
+    # kcal goal without measured expenditure: BMR × daily activity × personal factor + target balance
+    base, _ = daily_base({**dict(user), "weight_kg": weight or user["weight_kg"]})
+    plan["kcal_goal"] = round(base + plan["balance_goal"]) if base else None
     return plan
 
 

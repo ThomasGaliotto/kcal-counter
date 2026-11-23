@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from .auth import current_user, is_admin
 from .db import ROOT, db, garmin_token_dir
+from .metabolism import daily_base
 
 router = APIRouter(prefix="/api")
 
@@ -37,16 +38,6 @@ ACTIVITY_ICONS = {
 def icon_for(kind: str) -> str:
     kind = (kind or "").lower()
     return next((ic for key, ic in ACTIVITY_ICONS.items() if key in kind), "💪")
-
-
-# ---------- Basal metabolic rate ----------
-def bmr(user) -> float | None:
-    """Mifflin-St Jeor. None if the profile is incomplete."""
-    if not all(user[k] for k in ("sex", "birth_year", "height_cm", "weight_kg")):
-        return None
-    age = date.today().year - user["birth_year"]
-    base = 10 * user["weight_kg"] + 6.25 * user["height_cm"] - 5 * age
-    return base + (5 if user["sex"] == "m" else -161)
 
 
 # ---------- Cache ----------
@@ -388,9 +379,9 @@ def energy(day: date | None = None, user=Depends(current_user)):
         return out
 
     if source == "strava":
-        base = bmr(user)
+        base, out["calibration"] = daily_base(user)
         if base is not None:
-            out["resting"] = round(base * (user["life_factor"] or 1.2))
+            out["resting"] = round(base)
         try:
             data, out["warning"] = _with_cache(user["id"], day, "strava", lambda: _strava_day(user, day))
             out["activities"] = data["activities"]

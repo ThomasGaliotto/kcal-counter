@@ -185,7 +185,7 @@
         <p class="hint">Mangé − brûlé. Négatif pour perdre (−500 ≈ −0,5 kg/semaine), 0 pour stabiliser.</p>
       </div>
 
-      <div class="when-strava">
+      <div class="when-profile">
         <h3>Ton profil</h3>
         <div class="grid2">
           <label class="field">Sexe
@@ -201,15 +201,32 @@
             <span class="input-unit"><input id="set-weight" type="number" inputmode="decimal" step="0.1" min="20" max="400"> kg</span>
           </label>
         </div>
-        <label class="field">Vie quotidienne (hors sport)
-          <select id="set-life">
-            <option value="1">Métabolisme de base seul</option>
-            <option value="1.2">Sédentaire (bureau, peu de marche)</option>
-            <option value="1.375">Plutôt actif (debout, marche régulière)</option>
-            <option value="1.55">Très actif (métier physique)</option>
-          </select>
+
+        <h3>Morphologie</h3>
+        <p class="hint">Choisis la silhouette la plus proche de la tienne : elle donne une estimation de ton % de graisse.
+          Si tu connais ton vrai % (balance impédancemètre, mesure), indique-le : il est plus précis.</p>
+        <div id="morpho" class="morpho" role="radiogroup" aria-label="Silhouette"></div>
+        <label class="field">% de graisse mesuré (facultatif)
+          <span class="input-unit"><input id="set-fat" type="number" inputmode="decimal" step="0.5" min="3" max="70" placeholder="—"> %</span>
         </label>
-        <p id="bmr-preview" class="hint"></p>
+
+        <h3>Vie quotidienne (hors sport)</h3>
+        <fieldset class="choices life">
+          <label><input type="radio" name="life" value="1.2">
+            <span><b>Sédentaire</b><small>Bureau, télétravail, peu de marche</small></span></label>
+          <label><input type="radio" name="life" value="1.375">
+            <span><b>Un peu actif</b><small>Debout une partie de la journée : enseignant, vendeur, commercial</small></span></label>
+          <label><input type="radio" name="life" value="1.55">
+            <span><b>Actif</b><small>Debout et en mouvement : infirmier, serveur, artisan</small></span></label>
+          <label><input type="radio" name="life" value="1.725">
+            <span><b>Très actif</b><small>Métier physique : maçon, déménageur, agriculteur</small></span></label>
+        </fieldset>
+        <p id="life-hint" class="hint"></p>
+
+        <h3>Calibrage par tes pesées</h3>
+        <label class="switch-row"><span>Ajuster d'après mes résultats</span><input id="set-calib" type="checkbox" role="switch"></label>
+        <p id="calib-status" class="hint"></p>
+        <p id="bmr-preview" class="hint bmr-preview"></p>
       </div>
 
       <p id="settings-error" class="error" hidden></p>

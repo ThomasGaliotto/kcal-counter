@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
-    "protein_mode", "protein_value", "show_protein", "show_weight",
+    "protein_mode", "protein_value", "show_protein", "show_weight", "morphology", "body_fat_pct", "calibrate",
 )
 
 
@@ -60,6 +60,7 @@ def is_admin(user) -> bool:
 def _public(user) -> dict:
     data = {k: user[k] for k in PUBLIC_FIELDS}
     data["show_protein"], data["show_weight"] = bool(user["show_protein"]), bool(user["show_weight"])
+    data["calibrate"] = bool(user["calibrate"])
     data["is_admin"] = is_admin(user)
     data["strava_connected"] = bool(user["strava_refresh"])
     data["strava_available"] = bool(os.environ.get("STRAVA_CLIENT_ID"))
@@ -124,6 +125,9 @@ class Profile(BaseModel):
     life_factor: float | None = Field(None, ge=1.0, le=2.0)
     show_protein: bool | None = None
     show_weight: bool | None = None
+    morphology: int | None = Field(None, ge=0, le=5)  # 0 = clear
+    body_fat_pct: float | None = Field(None, ge=0, le=70)  # 0 = clear
+    calibrate: bool | None = None
 
 
 class PasswordChange(BaseModel):
@@ -207,12 +211,16 @@ def me(user=Depends(current_user)):
 @router.patch("/me")
 def update_me(body: Profile, user=Depends(current_user)):
     changes = body.model_dump(exclude_none=True)
+    for key in ("morphology", "body_fat_pct"):  # 0 means "remove it"
+        if changes.get(key) == 0:
+            changes[key] = None
     if changes:
         sets = ", ".join(f"{k} = ?" for k in changes)
         with db() as conn:
             conn.execute(f"UPDATE users SET {sets} WHERE id = ?", (*changes.values(), user["id"]))
             user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
-        if {"weight_kg", "sex", "birth_year", "height_cm", "life_factor"} & changes.keys():
+        if {"weight_kg", "sex", "birth_year", "height_cm", "life_factor", "morphology", "body_fat_pct",
+                "calibrate"} & changes.keys():
             from .goals import apply_plan  # late import: goals depends on auth
             apply_plan(user["id"])
             with db() as conn:

@@ -21,6 +21,7 @@ from .energy import router as energy_router
 from .limits import ai_limit
 from .goals import router as goals_router
 from .invites import router as invites_router
+from .metabolism import router as metabolism_router
 
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -100,6 +101,7 @@ app.include_router(auth_router)
 app.include_router(energy_router)
 app.include_router(goals_router)
 app.include_router(invites_router)
+app.include_router(metabolism_router)
 
 
 @app.middleware("http")

@@ -39,6 +39,9 @@ USER_COLUMNS = {
     "goal_date": "TEXT",                               # deadline (YYYY-MM-DD)
     "goal_start_weight": "REAL",
     "goal_start_date": "TEXT",
+    "morphology": "INTEGER",                           # silhouette 1 (very lean) … 5 (heavy)
+    "body_fat_pct": "REAL",                            # measured body fat %, preferred over the silhouette
+    "calibrate": "INTEGER NOT NULL DEFAULT 1",         # personal correction from weigh-ins
     "show_protein": "INTEGER NOT NULL DEFAULT 1",      # features shown (set per account)
     "show_weight": "INTEGER NOT NULL DEFAULT 1",       # weight goal, weigh-ins, chart
     "strava_athlete": "TEXT",

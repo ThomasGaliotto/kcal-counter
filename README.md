@@ -85,6 +85,21 @@ In the app: account button (top right) → **Dépense énergétique**. Three mod
 
 The **target balance** is for example −500 kcal/day to lose about 0.5 kg per week.
 
+### How the expenditure outside sport is computed
+
+Settings → **Ton profil** (shown in "None" and Strava modes; Garmin measures it):
+
+- **Basal metabolic rate**: with a body fat % it uses **Katch-McArdle** (370 + 21.6 × lean mass), which accounts
+  for muscle. The body fat % is the measured one if given (smart scale…), otherwise a visual estimate from the
+  chosen **silhouette** (very lean … heavy, e.g. ~10 % to ~33 % for men). Without either, **Mifflin-St Jeor**.
+- **Daily activity** (outside sport): sedentary ×1.2 (office), a bit active ×1.375 (standing), active ×1.55
+  (on the move), very active ×1.725 (physical job).
+- **Calibration from weigh-ins** (on by default): over the last 4 weeks, average intake and the weight trend
+  give the real expenditure (1 kg ≈ 7,700 kcal). Compared with the formula it yields a personal factor, capped at
+  ±20 %, so the goals adapt to people who lose weight more easily or with more difficulty. It needs at least
+  14 logged days (≥ 800 kcal) and 3 weigh-ins spread over 2 weeks. It also absorbs systematic errors in the
+  photo estimates.
+
 Activity cards link to the activity on Strava or Garmin Connect.
 
 ### Connections
