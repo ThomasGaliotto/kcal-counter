@@ -1,4 +1,4 @@
-"""Limites de débit en mémoire : freine les essais de mots de passe et l'abus d'Ollama."""
+"""In-memory rate limits: slow down password guessing and Ollama abuse."""
 
 import time
 from collections import defaultdict, deque
@@ -7,8 +7,8 @@ from fastapi import HTTPException, Request
 
 
 def client_ip(request: Request) -> str:
-    # Derrière Cloudflare Tunnel, la vraie IP arrive dans CF-Connecting-IP ;
-    # derrière Tailscale, --proxy-headers la place déjà dans request.client.
+    # Behind Cloudflare Tunnel, the real IP comes in CF-Connecting-IP;
+    # behind Tailscale, --proxy-headers already puts it in request.client.
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
 
 
@@ -28,9 +28,9 @@ class RateLimit:
         q.append(now)
 
 
-# 10 tentatives de connexion / inscription par IP et par quart d'heure
+# 10 login / sign-up attempts per IP every 15 minutes
 auth_limit = RateLimit(10, 15 * 60, "Trop de tentatives, réessaie dans quelques minutes")
-# 60 analyses par compte et par heure (photo, texte, correction, ingrédient)
+# 60 analyses per account per hour (photo, text, correction, ingredient)
 ai_limit = RateLimit(60, 60 * 60, "Trop d'analyses en peu de temps, réessaie plus tard")
 
 

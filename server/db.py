@@ -1,4 +1,4 @@
-"""Connexion SQLite et schéma (avec migrations légères des bases existantes)."""
+"""SQLite connection and schema (with lightweight migrations of existing databases)."""
 
 import os
 import sqlite3
@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_dotenv() -> None:
-    """Charge ROOT/.env (KEY=VALUE) sans écraser les variables déjà définies."""
+    """Load ROOT/.env (KEY=VALUE) without overriding variables that are already set."""
     env = ROOT / ".env"
     if env.exists():
         for line in env.read_text().splitlines():
@@ -22,25 +22,25 @@ _load_dotenv()
 DB_PATH = Path(os.environ.get("KCAL_DB", ROOT / "data" / "kcal.db"))
 GARMIN_DIR = DB_PATH.parent / "garmin"
 
-# Colonnes ajoutées à users après coup : nom -> définition SQL
+# Columns added to users later on: name -> SQL definition
 USER_COLUMNS = {
     "energy_source": "TEXT NOT NULL DEFAULT 'none'",  # none | strava | garmin
-    "balance_goal": "INTEGER NOT NULL DEFAULT -500",   # bilan visé (mangé - brûlé)
-    "sex": "TEXT",                                     # m | f, pour le métabolisme de base
+    "balance_goal": "INTEGER NOT NULL DEFAULT -500",   # target balance (eaten - burned)
+    "sex": "TEXT",                                     # m | f, for the basal metabolic rate
     "birth_year": "INTEGER",
     "height_cm": "REAL",
     "weight_kg": "REAL",
-    "life_factor": "REAL NOT NULL DEFAULT 1.2",        # vie quotidienne hors sport
-    "protein_goal": "INTEGER",                         # g/jour effectif (calculé par goals.apply_plan)
+    "life_factor": "REAL NOT NULL DEFAULT 1.2",        # daily activity excluding sport
+    "protein_goal": "INTEGER",                         # effective g/day (computed by goals.apply_plan)
     "protein_mode": "TEXT NOT NULL DEFAULT 'auto'",    # auto | grams | per_kg
-    "protein_value": "REAL",                           # g/jour (grams) ou g/kg (per_kg)
-    "goal_type": "TEXT",                               # lose | maintain | gain (vide = pas d'objectif)
-    "goal_weight": "REAL",                             # poids visé (kg)
-    "goal_date": "TEXT",                               # horizon (AAAA-MM-JJ)
+    "protein_value": "REAL",                           # g/day (grams) or g/kg (per_kg)
+    "goal_type": "TEXT",                               # lose | maintain | gain (empty = no goal)
+    "goal_weight": "REAL",                             # target weight (kg)
+    "goal_date": "TEXT",                               # deadline (YYYY-MM-DD)
     "goal_start_weight": "REAL",
     "goal_start_date": "TEXT",
-    "show_protein": "INTEGER NOT NULL DEFAULT 1",      # fonctionnalités affichées (réglables par compte)
-    "show_weight": "INTEGER NOT NULL DEFAULT 1",       # objectif de poids, pesées, courbe
+    "show_protein": "INTEGER NOT NULL DEFAULT 1",      # features shown (set per account)
+    "show_weight": "INTEGER NOT NULL DEFAULT 1",       # weight goal, weigh-ins, chart
     "strava_athlete": "TEXT",
     "strava_access": "TEXT",
     "strava_refresh": "TEXT",
@@ -91,7 +91,7 @@ def db() -> sqlite3.Connection:
     if "water_ml" not in cols:
         conn.execute("ALTER TABLE meals ADD COLUMN water_ml REAL NOT NULL DEFAULT 0")
     if "user_id" not in cols:
-        # les repas d'avant les comptes restent sans propriétaire jusqu'à la création du premier compte
+        # meals from before accounts stay ownerless until the first account is created
         conn.execute("ALTER TABLE meals ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")
     conn.execute("CREATE INDEX IF NOT EXISTS meals_user_day ON meals(user_id, day)")
     user_cols = _columns(conn, "users")

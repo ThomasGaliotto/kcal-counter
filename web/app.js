@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
-let me = null; // utilisateur connecté : { id, email, name, kcal_goal, water_goal }
+let me = null; // signed-in user: { id, email, name, kcal_goal, water_goal }
 let day = todayISO();
-let draft = null; // repas en cours de vérification
+let draft = null; // meal being reviewed
 
 function todayISO() {
   const d = new Date();
@@ -24,7 +24,7 @@ const macro = (items, key) => Math.round(items.reduce((s, it) => s + it.grams * 
 async function api(path, opts) {
   const r = await fetch(path, opts);
   if (r.status === 401 && !path.startsWith("/api/auth/")) {
-    showAuth(); // session expirée ou jamais connecté
+    showAuth(); // session expired or never signed in
     throw new Error("Connecte-toi pour continuer");
   }
   if (!r.ok) {
@@ -38,7 +38,7 @@ async function api(path, opts) {
   return r.json();
 }
 
-// ---------- Journal du jour ----------
+// ---------- Daily log ----------
 async function loadDay() {
   $("day-label").textContent = dayLabel(day);
   $("next").disabled = day >= todayISO();
@@ -48,13 +48,13 @@ async function loadDay() {
     api(`/api/meals?day=${day}`),
     me.energy_source === "none" ? null : api(`/api/energy?day=${day}`).catch((err) => ({ error: err.message, activities: [] })),
   ]);
-  if (shownDay !== day) return; // l'utilisateur a changé de jour entre-temps
+  if (shownDay !== day) return; // the user switched to another day meanwhile
 
   const eaten = data.total_kcal;
   const model = energyModel(energy);
   const energyMode = me.energy_source !== "none";
 
-  // ----- Carte « Mangé » : objectif fixe, ou brûlé prévu à minuit + bilan visé
+  // ----- "Eaten" card: fixed goal, or burned projected at midnight + target balance
   const kcal_goal = model ? Math.max(0, Math.round(model.projected + me.balance_goal)) : me.kcal_goal;
   $("goal").textContent = fmt(kcal_goal);
   $("total").textContent = fmt(eaten);
@@ -62,7 +62,7 @@ async function loadDay() {
   fill.style.width = Math.min(100, (eaten / kcal_goal) * 100) + "%";
   fill.classList.toggle("over", eaten > kcal_goal);
 
-  // ----- Carte « Brûlé » et projection
+  // ----- "Burned" card and projection
   $("cards").classList.toggle("two", energyMode);
   $("card-burned").hidden = !energyMode;
   $("projection").hidden = !model;
@@ -75,14 +75,14 @@ async function loadDay() {
 
   renderGoalCard();
 
-  // ----- Protéines
+  // ----- Protein
   const pGoal = proteinGoal();
   $("protein-total").textContent = fmt(data.total_protein_g ?? 0);
   $("protein-goal").textContent = fmt(pGoal);
   $("protein-fill").style.width = Math.min(100, ((data.total_protein_g ?? 0) / pGoal) * 100) + "%";
 
-  // ----- Eau
-  // Sport : +500 ml par heure d'activité enregistrée (Strava/Garmin), arrondi à 50 ml
+  // ----- Water
+  // Sport: +500 ml per hour of recorded activity (Strava/Garmin), rounded to 50 ml
   const sportMin = (energy?.activities || []).reduce((s, a) => s + (a.minutes || 0), 0);
   const sportWater = Math.round((sportMin / 60) * 500 / 50) * 50;
   const waterTarget = water_goal + sportWater;
@@ -93,7 +93,7 @@ async function loadDay() {
   $("water-total").textContent = fmt(data.total_water_ml);
   $("water-fill").style.width = Math.min(100, (data.total_water_ml / waterTarget) * 100) + "%";
 
-  // ----- Colonnes : repas à gauche, activités à droite (en mode dépense)
+  // ----- Columns: meals on the left, activities on the right (in expenditure mode)
   const activities = energy ? energy.activities || [] : [];
   $("columns").classList.toggle("two", energyMode);
   $("activities-col").hidden = !energyMode;
@@ -104,7 +104,7 @@ async function loadDay() {
   const actList = $("activities");
   actList.innerHTML = "";
   for (const a of activities) {
-    // carte cliquable : ouvre l'activité sur Strava / Garmin Connect
+    // clickable card: opens the activity on Strava / Garmin Connect
     const el = document.createElement(a.url ? "a" : "div");
     el.className = "meal activity";
     if (a.url) {
@@ -155,7 +155,7 @@ async function loadDay() {
       el.querySelector(".meal-items").append(w);
     }
     if (!m.items.length) {
-      // entrée « eau seule » : pas de kcal ni de macros à afficher
+      // "water only" entry: no kcal or macros to show
       el.querySelector(".meal-head span:last-child").textContent = "";
       el.querySelector(".meal-macros").remove();
     }
@@ -172,7 +172,7 @@ async function loadDay() {
 const fmt = (n) => Number(n).toLocaleString("fr-FR");
 const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt(Math.abs(Math.round(n)));
 
-// Part de la journée affichée déjà écoulée : 1 pour un jour passé, l'heure actuelle / 24 h pour aujourd'hui
+// Elapsed share of the displayed day: 1 for a past day, current time / 24 h for today
 function dayFraction(iso) {
   const today = todayISO();
   if (iso < today) return 1;
@@ -182,11 +182,11 @@ function dayFraction(iso) {
   return (now - midnight) / 86400000;
 }
 
-/* Dépense du jour ramenée à l'instant présent et projetée à minuit.
-   - Strava : `resting` = base de la journée entière (métabolisme × vie quotidienne), `active` = activités.
-     Brûlé maintenant = base × fraction écoulée + activités ; prévu à minuit = base entière + activités faites.
-   - Garmin : `burned` = total mesuré jusqu'ici, `resting` = métabolisme de base de la journée.
-     Prévu à minuit = total actuel + part du métabolisme restant jusqu'à minuit. */
+/* Today's expenditure, scaled to the present moment and projected to midnight.
+   - Strava: `resting` = whole-day baseline (BMR × daily activity), `active` = activities.
+     Burned now = baseline × elapsed fraction + activities; projected at midnight = full baseline + activities done.
+   - Garmin: `burned` = total measured so far, `resting` = the day's basal metabolic rate.
+     Projected at midnight = current total + share of BMR left until midnight. */
 function energyModel(energy) {
   if (!energy || energy.burned == null) return null;
   const f = dayFraction(day);
@@ -218,7 +218,7 @@ function renderBurned(model) {
 function renderProjection(model, eaten) {
   const left = model.projected + me.balance_goal - eaten;
   $("projection").querySelector(".card-label").textContent = model.f < 1 ? "Projection à minuit" : "Bilan de la journée";
-  const live = model.f < 1; // aujourd'hui : projection ; jour passé : valeurs définitives
+  const live = model.f < 1; // today: projection; past day: final values
   $("proj-burned").textContent = `${fmt(Math.round(model.projected))} kcal`;
   $("proj-burned").previousElementSibling.textContent = live ? "Brûlé prévu" : "Brûlé";
   $("proj-balance").textContent = `${signed(eaten - model.projected)} kcal`;
@@ -231,7 +231,7 @@ function renderProjection(model, eaten) {
   $("proj-left").title = `objectif de bilan ${signed(me.balance_goal)} kcal`;
 }
 
-// ---------- Photo -> analyse ----------
+// ---------- Photo -> analysis ----------
 document.querySelectorAll(".photo-input").forEach((input) => input.addEventListener("change", onPhoto));
 
 async function onPhoto(e) {
@@ -243,7 +243,7 @@ async function onPhoto(e) {
   analyze(() => api("/api/analyze", { method: "POST", body: form }), { image: URL.createObjectURL(file) });
 }
 
-// Repas décrit en texte : « une pomme et un verre d'eau »
+// Meal described in text: "an apple and a glass of water"
 $("text-btn").onclick = () => ask({
   title: "✍️ Ajouter en texte",
   submit: "Analyser",
@@ -256,7 +256,7 @@ $("text-btn").onclick = () => ask({
   },
 });
 
-// Modifier un repas déjà enregistré : même écran que la vérification après analyse
+// Edit a saved meal: same screen as the review after analysis
 function editMeal(m) {
   draft = { id: m.id, title: m.title, items: m.items.map((it) => ({ ...it })), water_ml: m.water_ml || 0 };
   $("review").hidden = false;
@@ -321,7 +321,7 @@ function renderDraft() {
     k100.value = Math.round(it.kcal_100g);
     const refresh = () => { row.querySelector(".kcal").textContent = Math.round(kcalOf(it)) + " kcal"; updateDraftTotal(); };
     name.oninput = () => (it.name = name.value);
-    // aliment ajouté ou renommé : l'IA recalcule ses valeurs (et sa portion s'il vient d'être ajouté)
+    // food added or renamed: the AI recomputes its values (and its portion if just added)
     name.onchange = async () => {
       const n = name.value.trim();
       if (!n || n === it.estimatedFor) return;
@@ -332,11 +332,11 @@ function renderDraft() {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: n, grams: it.fresh ? null : it.grams || null }),
         });
-        if (it.estimatedFor !== n) return; // renommé entre-temps
+        if (it.estimatedFor !== n) return; // renamed meanwhile
         Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g });
         if (it.fresh) it.grams = est.grams || it.grams;
         it.fresh = false;
-        if (!row.isConnected) return renderDraft(); // liste redessinée pendant le calcul
+        if (!row.isConnected) return renderDraft(); // list redrawn during the estimate
         grams.value = Math.round(it.grams);
         k100.value = Math.round(it.kcal_100g);
         p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
@@ -378,7 +378,7 @@ $("add-item").onclick = () => {
 };
 $("meal-title").oninput = (e) => (draft.title = e.target.value);
 
-// Corriger le plat avec un commentaire : l'IA reprend toute l'analyse (aliments, grammes, kcal, macros, eau)
+// Correct the dish with a comment: the AI redoes the whole analysis (foods, grams, kcal, macros, water)
 $("fix-form").onsubmit = async (e) => {
   e.preventDefault();
   const comment = $("fix-text").value.trim();
@@ -425,7 +425,7 @@ $("save").onclick = async () => {
   if (!items.length && !water_ml) return notice("Ajoute au moins un aliment ou de l'eau.");
   $("save").disabled = true;
   try {
-    // Le repas est rangé dans le jour affiché (pratique pour rattraper un oubli d'hier)
+    // The meal is filed under the displayed day (handy to catch up on yesterday)
     const eaten_at = draft.id || day === todayISO() ? null : `${day}T12:00:00`;
     await api(draft.id ? `/api/meals/${draft.id}` : "/api/meals", {
       method: draft.id ? "PUT" : "POST",
@@ -443,11 +443,11 @@ $("save").onclick = async () => {
 // ---------- Navigation ----------
 $("prev").onclick = () => { day = shiftDay(day, -1); loadDay(); };
 $("next").onclick = () => { if (day < todayISO()) { day = shiftDay(day, 1); loadDay(); } };
-/* Fenêtre de saisie dans l'app (prompt() n'existe pas dans tous les navigateurs intégrés).
-   fields : [{ key, label, type ("number" | "password" | "text"), value, unit, step, min, max }]
-   onSubmit(values) : async ; lever une erreur laisse la fenêtre ouverte avec le message. */
-// Fenêtre de saisie. Types de champ : number, text, password, textarea, choice (puces), note (texte d'aide).
-// onChange(ui) est appelé quand une valeur change ; ui[clé] = { label, text, input, unit, get() }.
+/* In-app input dialog (prompt() isn't available in every embedded browser).
+   fields: [{ key, label, type, value, unit, step, min, max }]
+     type: number, text, password, textarea, choice (chips), note (help text).
+   onSubmit(values): async; throwing keeps the dialog open with the message.
+   onChange(ui) is called when a value changes; ui[key] = { label, text, input, unit, get() }. */
 function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
   const dlg = $("ask");
   $("ask-title").textContent = title;
@@ -518,7 +518,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
     for (const f of fields) {
       if (f.type === "note") continue;
       const u = ui[f.key];
-      if (u.label.hidden) continue; // champ masqué : ignoré
+      if (u.label.hidden) continue; // hidden field: skipped
       if (f.type === "choice") { values[f.key] = u.get(); continue; }
       const raw = u.input.value.trim();
       if (f.type === "number") {
@@ -548,7 +548,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
   const first = Object.values(ui).find((u) => u.input && !u.label.hidden)?.input;
   if (first) { first.focus(); first.select(); }
 }
-// confirm() et alert() ne s'affichent pas dans tous les navigateurs intégrés : versions dans l'app
+// confirm() and alert() don't show in every embedded browser: in-app versions
 function confirmBox(message, { title = "Confirmer", ok = "Supprimer", danger = true } = {}) {
   return new Promise((resolve) => {
     let done = false;
@@ -586,7 +586,7 @@ $("goal-btn").onclick = () => {
   else openSettings();
 };
 $("water-gauge").onclick = () => editGoal("water_goal", "💧 Objectif d'eau", "ml", 20000);
-// Objectif de protéines : calculé par le serveur (objectif de poids, ou réglé à la main en g ou en g/kg)
+// Protein target: computed by the server (weight goal, or set manually in g or g/kg)
 const proteinGoal = () => me.protein_goal || 100;
 $("protein-card").onclick = () => {
   const weight = plan?.current_weight || me.weight_kg;
@@ -610,7 +610,7 @@ $("protein-card").onclick = () => {
     onChange(ui) {
       const mode = ui.mode.get();
       ui.v.label.hidden = mode === "auto";
-      if (mode !== shown) { // changement de mode : on remet la valeur par défaut de ce mode
+      if (mode !== shown) { // mode changed: reset to that mode's default value
         if (mode !== "auto") ui.v.input.value = fmtNum(defaults[mode]);
         shown = mode;
       }
@@ -648,7 +648,7 @@ $("protein-card").onclick = () => {
   });
 };
 
-// ---------- Comptes ----------
+// ---------- Accounts ----------
 let authMode = "login";
 let inviteRequired = false;
 
@@ -675,7 +675,7 @@ async function showAuth() {
   setAuthMode(authMode);
 }
 
-// Lien d'invitation (?invite=…) : ouvre directement « Créer un compte » avec le code rempli
+// Invitation link (?invite=…): opens "Create account" directly with the code filled in
 const inviteParam = new URLSearchParams(location.search).get("invite");
 if (inviteParam) {
   $("auth-invite").value = inviteParam;
@@ -683,7 +683,7 @@ if (inviteParam) {
   history.replaceState(null, "", location.pathname);
 }
 
-// ---------- Invitations (administrateur) ----------
+// ---------- Invitations (administrator) ----------
 const fmtShort = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 
 async function shareInvite(inv) {
@@ -696,7 +696,7 @@ async function shareInvite(inv) {
     await navigator.clipboard.writeText(inv.link);
     notice("Le lien est copié : colle-le dans un message.", "Lien copié");
   } catch {
-    // presse-papiers indisponible (http, navigateur intégré) : lien présélectionné à copier
+    // clipboard unavailable (http, embedded browser): link preselected for copying
     ask({ title: "Copie ce lien", submit: "OK", fields: [{ key: "link", label: "Lien d'invitation", value: inv.link }], onSubmit: () => {} });
   }
 }
@@ -748,7 +748,7 @@ $("invite-new").onclick = () => ask({
     const res = await api("/api/invites", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }),
     });
-    renderInvites(res.invites); // la nouvelle invitation est en haut, avec « Partager »
+    renderInvites(res.invites); // the new invitation is at the top, with "Partager"
   },
 });
 
@@ -817,7 +817,7 @@ $("change-password").onclick = () => {
   });
 };
 
-// ---------- Réglages : dépense énergétique ----------
+// ---------- Settings: energy expenditure ----------
 const sourceValue = () => ($("settings-form").querySelector("input[name=source]:checked") || {}).value || "none";
 
 function bmrPreview() {
@@ -845,7 +845,7 @@ function renderSettingsVisibility() {
   }
 }
 
-// ----- Connexions Strava / Garmin -----
+// ----- Strava / Garmin connections -----
 const insecure = location.protocol === "http:" && !["localhost", "127.0.0.1"].includes(location.hostname);
 const INSECURE_NOTE = `<p class="hint warn-text">⚠️ Tu es connecté en HTTP non chiffré sur le réseau.
   Pour saisir un mot de passe ou une clé, fais-le plutôt depuis le PC (http://localhost:8420) ou via Tailscale.</p>`;
@@ -874,7 +874,7 @@ function panelError(panel, msg) {
   if (!el) { el = document.createElement("p"); el.className = "error"; panel.prepend(el); }
   el.textContent = msg;
 }
-// Entrée dans un champ du panneau = son bouton principal (et non l'enregistrement des réglages)
+// Enter in a panel field = its main button (not saving the settings)
 function bindEnter(panel, action) {
   panel.querySelectorAll("input").forEach((i) => i.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); action(); }
@@ -896,7 +896,7 @@ function disconnectPanel(panel, label, url) {
 }
 
 async function goToStrava() {
-  // enregistre d'abord les réglages en cours pour ne pas les perdre pendant le passage par Strava
+  // save the current settings first so they aren't lost during the Strava round trip
   if (await saveSettings(false)) location.href = "/api/strava/connect";
 }
 
@@ -912,7 +912,7 @@ function renderStravaPanel(panel) {
     panel.innerHTML = `<p>Strava n'est pas encore activé sur ce serveur. Demande à la personne qui héberge Kcal de le configurer.</p>`;
     return;
   }
-  // Première fois : l'administrateur déclare l'application Strava
+  // First time: the administrator registers the Strava application
   panel.innerHTML = `
     <p>Première fois : il faut déclarer Kcal chez Strava (une seule fois, environ 5 minutes).</p>
     <ol>
@@ -1007,7 +1007,7 @@ function openSettings() {
   const f = $("settings-form");
   (f.querySelector(`input[name=source][value=${me.energy_source}]`) || f.querySelector("input[name=source]")).checked = true;
   $("set-balance").value = me.balance_goal;
-  $("set-balance").disabled = !!plan; // fixé par l'objectif
+  $("set-balance").disabled = !!plan; // set by the goal
   $("set-balance").closest(".when-energy").querySelector(".hint").textContent = plan
     ? `Calculé à partir de ton objectif (${plan.label.toLowerCase()}). Modifie l'objectif pour le changer.`
     : "Mangé − brûlé. Négatif pour perdre (−500 ≈ −0,5 kg/semaine), 0 pour stabiliser.";
@@ -1031,7 +1031,7 @@ async function saveSettings(close = true) {
     life_factor: Number($("set-life").value),
   };
   if (!plan) body.balance_goal = num("set-balance") ?? me.balance_goal;
-  // n'envoie le profil que s'il est renseigné (les champs vides ne l'effacent pas)
+  // only send the profile if filled in (empty fields don't erase it)
   if ($("set-sex").value) body.sex = $("set-sex").value;
   for (const [id, key] of [["set-birth", "birth_year"], ["set-height", "height_cm"], ["set-weight", "weight_kg"]]) {
     if (num(id) != null) body[key] = num(id);
@@ -1067,7 +1067,7 @@ function handleOAuthReturn() {
   if (status === "wronghost" && me?.strava_host) return setTimeout(wrongStravaHost, 300);
   if (msg) setTimeout(() => notice(msg, "Strava"), 300);
 }
-// Connexion lancée depuis une autre adresse que celle déclarée chez Strava (sinon : page d'erreur Strava)
+// Connection started from an address other than the one registered with Strava (else: Strava error page)
 function wrongStravaHost() {
   const host = me.strava_host;
   ask({
@@ -1085,8 +1085,8 @@ function wrongStravaHost() {
   $("ask-fields").append(force);
 }
 
-// ---------- Objectif (perte de poids, maintien, muscle) ----------
-let plan = null; // plan calculé par le serveur à partir de l'objectif
+// ---------- Goal (weight loss, maintenance, muscle) ----------
+let plan = null; // plan computed by the server from the goal
 const fmtKg = (n) => Number(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
 const fmtDate = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const goalType = () => ($("goal-form").querySelector("input[name=goal-type]:checked") || {}).value;
@@ -1098,7 +1098,7 @@ async function refreshGoal() {
   me = res;
 }
 
-// Fonctionnalités désactivables par compte (menu du compte)
+// Features that can be turned off per account (account menu)
 function applyFeatures() {
   $("protein-card").hidden = !me.show_protein;
   $("protein-card").parentElement.classList.toggle("two", me.show_protein);
@@ -1264,7 +1264,7 @@ async function afterWeightChange() {
   if ($("weights-dialog").open) renderWeights();
 }
 
-// ---------- Évolution du poids ----------
+// ---------- Weight history ----------
 let weightRange = "90";
 let weightsCache = [];
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -1279,7 +1279,7 @@ function svgEl(tag, attrs, parent) {
   return el;
 }
 
-// Trajectoire prévue par l'objectif : du poids de départ au poids visé, au rythme du plan
+// Path set by the goal: from the start weight to the target weight, at the plan's pace
 function goalLine() {
   if (!plan || !plan.start_weight || !plan.target_weight || !plan.start_date) return null;
   const end = plan.eta_date || plan.target_date;
@@ -1321,7 +1321,7 @@ function renderWeightStats() {
   const g = goalLine();
   if (g) {
     const expected = goalAt(g, toTime(weightsCache[weightsCache.length - 1].day));
-    const ahead = plan.type === "gain" ? last - expected : expected - last; // > 0 : en avance
+    const ahead = plan.type === "gain" ? last - expected : expected - last; // > 0: ahead
     const note = document.createElement("div");
     note.className = "note";
     note.textContent = Math.abs(ahead) < 0.15 ? "Pile dans le rythme de ton objectif."
@@ -1346,7 +1346,7 @@ function drawWeightChart() {
   const g = goalLine();
   const today = toTime(todayISO());
 
-  // Période affichée ; « Tout » va jusqu'à l'échéance de l'objectif
+  // Displayed period; "Tout" extends to the goal's deadline
   let t0 = weightRange === "all"
     ? Math.min(...weightsCache.map((w) => toTime(w.day)), g ? g.t0 : today)
     : today - Number(weightRange) * DAY_MS;
@@ -1361,7 +1361,7 @@ function drawWeightChart() {
     return;
   }
 
-  // Échelle verticale : pesées + trajectoire de l'objectif sur la période
+  // Vertical scale: weigh-ins + goal path over the period
   const ys = pts.map((p) => p.kg);
   if (g) ys.push(goalAt(g, Math.max(t0, g.t0)), goalAt(g, Math.min(t1, g.t1)));
   let lo = Math.min(...ys), hi = Math.max(...ys);
@@ -1372,7 +1372,7 @@ function drawWeightChart() {
   const x = (t) => pad.l + ((t - t0) / (t1 - t0)) * (W - pad.l - pad.r);
   const y = (kg) => pad.t + ((hi - kg) / (hi - lo)) * (H - pad.t - pad.b);
 
-  // Grille et axes, discrets
+  // Grid and axes, kept subtle
   for (let v = lo; v <= hi + 1e-9; v += step) {
     svgEl("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v), class: "grid" }, svg);
     svgEl("text", { x: pad.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmtKg(v);
@@ -1384,7 +1384,7 @@ function drawWeightChart() {
       .textContent = shortDate(t);
   }
 
-  // Trajectoire de l'objectif (pointillés) + point d'arrivée
+  // Goal path (dashed) + end point
   if (g) {
     const a = Math.max(t0, g.t0), b = Math.min(t1, g.t1);
     if (b > a) {
@@ -1396,22 +1396,22 @@ function drawWeightChart() {
     }
   }
 
-  // Courbe des pesées
+  // Weigh-in line
   if (pts.length > 1) {
     svgEl("polyline", { points: pts.map((p) => `${x(p.t)},${y(p.kg)}`).join(" "), class: "line" }, svg);
   }
   for (const p of pts) svgEl("circle", { cx: x(p.t), cy: y(p.kg), r: 4, class: "dot" }, svg);
-  if (pts.length) { // étiquette directe sur la dernière valeur seulement, du côté opposé à l'objectif
+  if (pts.length) { // direct label on the last value only, on the side away from the goal
     const p = pts[pts.length - 1];
     const below = g && p.t >= g.t0 && goalAt(g, p.t) > p.kg && y(p.kg) + 20 < H - pad.b;
     svgEl("text", { x: x(p.t) - (x(p.t) > W - 50 ? 6 : 0), y: below ? y(p.kg) + 18 : y(p.kg) - 10,
       "text-anchor": x(p.t) > W - 50 ? "end" : "middle" }, svg).textContent = `${fmtKg(p.kg)} kg`;
   }
 
-  // Légende (deux tracés : la courbe et l'objectif)
+  // Legend (two series: the line and the goal)
   $("chart-key").innerHTML = g ? `<span>Poids</span><span class="ref">Objectif (${plan.label.toLowerCase()})</span>` : "";
 
-  // Survol / toucher : repère vertical + info-bulle sur la pesée la plus proche
+  // Hover / touch: vertical guide + tooltip on the nearest weigh-in
   const cross = svgEl("line", { y1: pad.t, y2: H - pad.b, class: "cross", visibility: "hidden" }, svg);
   const hit = svgEl("rect", { x: pad.l, y: 0, width: W - pad.l - pad.r, height: H, class: "hit" }, svg);
   const tip = $("chart-tip");
@@ -1439,7 +1439,7 @@ function drawWeightChart() {
   hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); tip.hidden = true; });
 }
 
-// Tableau des pesées (vue accessible du graphique), la plus récente en premier
+// Weigh-in table (accessible view of the chart), most recent first
 function renderWeightList() {
   const box = $("weight-list");
   box.innerHTML = "";
@@ -1482,12 +1482,12 @@ async function startApp() {
   handleOAuthReturn();
   $("account-btn").textContent = (me.name || "?").trim().charAt(0).toUpperCase();
   day = todayISO();
-  try { await refreshGoal(); } catch {} // sans objectif ou hors ligne : on continue
+  try { await refreshGoal(); } catch {} // no goal or offline: carry on
   applyFeatures();
   loadDay().catch(showError);
 }
 function showError(err) {
-  if (!$("auth").hidden) return; // l'écran de connexion est déjà affiché
+  if (!$("auth").hidden) return; // the login screen is already shown
   $("empty").hidden = false;
   $("empty").textContent = "Serveur injoignable : " + err.message;
 }

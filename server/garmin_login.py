@@ -1,9 +1,9 @@
-"""Connexion unique à Garmin Connect, à lancer dans un terminal sur le serveur.
+"""One-time Garmin Connect login, to run in a terminal on the server.
 
-    .venv/bin/python -m server.garmin_login ton-email-kcal@exemple.fr
+    .venv/bin/python -m server.garmin_login your-kcal-email@example.com
 
-Ton mot de passe Garmin est demandé ici, utilisé une fois, et jamais enregistré :
-seuls les jetons d'accès sont sauvegardés (fichier lisible par toi seul) dans data/garmin/.
+Your Garmin password is asked for here, used once, and never saved:
+only the access tokens are stored (in a file readable by you only) in data/garmin/.
 """
 
 import getpass

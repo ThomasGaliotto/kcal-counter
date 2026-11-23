@@ -1,4 +1,4 @@
-"""Comptes utilisateurs : inscription, connexion par e-mail + mot de passe, sessions par cookie."""
+"""User accounts: sign-up, e-mail + password login, cookie sessions."""
 
 import asyncio
 import hashlib
@@ -16,14 +16,14 @@ from .db import db, garmin_token_dir
 from .limits import limit_auth
 
 COOKIE = "kcal_session"
-SESSION_DAYS = 180  # l'iPhone reste connecté ~6 mois
-INVITE_CODE = os.environ.get("KCAL_INVITE_CODE", "")  # code partagé facultatif, en plus des invitations
-OPEN_SIGNUP = os.environ.get("KCAL_OPEN_SIGNUP") == "1"  # 1 = inscription libre, sans invitation
+SESSION_DAYS = 180  # the iPhone stays signed in for ~6 months
+INVITE_CODE = os.environ.get("KCAL_INVITE_CODE", "")  # optional shared code, on top of invitations
+OPEN_SIGNUP = os.environ.get("KCAL_OPEN_SIGNUP") == "1"  # 1 = open sign-up, no invitation needed
 
 router = APIRouter(prefix="/api")
 
 
-# ---------- Mots de passe (scrypt, bibliothèque standard) ----------
+# ---------- Passwords (scrypt, standard library) ----------
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
@@ -51,7 +51,7 @@ PUBLIC_FIELDS = (
 
 
 def is_admin(user) -> bool:
-    """L'administrateur est le premier compte créé (celui qui héberge l'app)."""
+    """The administrator is the first account created (whoever hosts the app)."""
     with db() as conn:
         first = conn.execute("SELECT MIN(id) FROM users").fetchone()[0]
     return user["id"] == first
@@ -63,7 +63,7 @@ def _public(user) -> dict:
     data["is_admin"] = is_admin(user)
     data["strava_connected"] = bool(user["strava_refresh"])
     data["strava_available"] = bool(os.environ.get("STRAVA_CLIENT_ID"))
-    data["strava_host"] = os.environ.get("STRAVA_CALLBACK_HOST")  # adresse acceptée par Strava
+    data["strava_host"] = os.environ.get("STRAVA_CALLBACK_HOST")  # address accepted by Strava
     data["garmin_connected"] = (garmin_token_dir(user["id"]) / "garmin_tokens.json").exists()
     return data
 
@@ -84,7 +84,7 @@ def _start_session(request: Request, response: Response, user_id: int) -> None:
 
 
 def current_user(request: Request):
-    """Dépendance FastAPI : renvoie l'utilisateur connecté, sinon 401."""
+    """FastAPI dependency: returns the signed-in user, otherwise 401."""
     token = request.cookies.get(COOKIE)
     if token:
         with db() as conn:
@@ -138,7 +138,7 @@ def _has_users() -> bool:
 
 @router.get("/auth/config")
 def auth_config():
-    # Le tout premier compte (l'administrateur) se crée sans invitation
+    # The very first account (the administrator) is created without an invitation
     return {"invite_required": not OPEN_SIGNUP and _has_users()}
 
 
@@ -164,14 +164,14 @@ def register(body: Register, request: Request, response: Response):
             (email, body.name.strip(), hash_password(body.password), datetime.now().isoformat()),
         )
         user_id = cur.lastrowid
-        if need_invite:  # l'invitation ne sert qu'une fois (vérifié à nouveau contre les doubles envois)
+        if need_invite:  # an invitation works only once (checked again against double submits)
             used = conn.execute(
                 "UPDATE invites SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL",
                 (user_id, datetime.now().isoformat(), code),
             )
             if used.rowcount != 1:
                 raise HTTPException(403, "Invitation déjà utilisée")
-        if first:  # le premier compte récupère l'historique d'avant les comptes
+        if first:  # the first account takes over the history from before accounts existed
             conn.execute("UPDATE meals SET user_id = ? WHERE user_id IS NULL", (user_id,))
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     _start_session(request, response, user_id)
@@ -183,7 +183,7 @@ async def login(body: Login, request: Request, response: Response):
     with db() as conn:
         user = conn.execute("SELECT * FROM users WHERE email = ?", (body.email.strip().lower(),)).fetchone()
     if not user or not check_password(body.password, user["pw_hash"]):
-        await asyncio.sleep(1)  # ralentit les essais de mots de passe en série
+        await asyncio.sleep(1)  # slows down repeated password guesses
         raise HTTPException(401, "E-mail ou mot de passe incorrect")
     _start_session(request, response, user["id"])
     return _public(user)
@@ -213,7 +213,7 @@ def update_me(body: Profile, user=Depends(current_user)):
             conn.execute(f"UPDATE users SET {sets} WHERE id = ?", (*changes.values(), user["id"]))
             user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
         if {"weight_kg", "sex", "birth_year", "height_cm", "life_factor"} & changes.keys():
-            from .goals import apply_plan  # import tardif : goals dépend de auth
+            from .goals import apply_plan  # late import: goals depends on auth
             apply_plan(user["id"])
             with db() as conn:
                 user = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
@@ -227,6 +227,6 @@ def change_password(body: PasswordChange, request: Request, user=Depends(current
     keep = _token_hash(request.cookies.get(COOKIE, ""))
     with db() as conn:
         conn.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (hash_password(body.new), user["id"]))
-        # déconnecte les autres appareils
+        # signs out the other devices
         conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user["id"], keep))
     return {"ok": True}

@@ -1,6 +1,6 @@
-"""Sauvegarde de la base : copie cohérente dans data/backups/, garde les 14 dernières.
+"""Database backup: consistent copy into data/backups/, keeps the last 14.
 
-Lancé chaque nuit par deploy/kcal-backup.timer :  python -m server.backup
+Run every night by deploy/kcal-backup.timer:  python -m server.backup
 """
 
 import sqlite3
@@ -16,7 +16,7 @@ def main() -> None:
     folder.mkdir(exist_ok=True)
     target = folder / f"kcal-{datetime.now():%Y-%m-%d}.db"
     with sqlite3.connect(DB_PATH) as src, sqlite3.connect(target) as dst:
-        src.backup(dst)  # copie sûre même si l'app écrit en même temps
+        src.backup(dst)  # safe copy even while the app is writing
     for old in sorted(folder.glob("kcal-*.db"))[:-KEEP]:
         old.unlink()
     print(f"Sauvegarde : {target}")

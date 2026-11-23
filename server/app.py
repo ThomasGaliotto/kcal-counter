@@ -1,4 +1,4 @@
-"""API kcal-counter : photo -> Ollama (vision) -> aliments + calories, historique SQLite."""
+"""kcal-counter API: photo -> Ollama (vision) -> foods + calories, SQLite history."""
 
 import base64
 import io
@@ -24,8 +24,8 @@ from .invites import router as invites_router
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:9b")
-MAX_UPLOAD = 20 * 1024 * 1024  # photo envoyée : 20 Mo max
-MAX_SIDE = 1024  # on réduit la photo : plus rapide, et suffisant pour reconnaître un plat
+MAX_UPLOAD = 20 * 1024 * 1024  # uploaded photo: 20 MB max
+MAX_SIDE = 1024  # the photo is downscaled: faster, and enough to recognise a dish
 
 PROMPT = """Tu es un nutritionniste. Analyse la photo de ce repas.
 Liste chaque aliment visible séparément (ex : "riz blanc cuit", "poulet rôti", "sauce tomate").
@@ -72,7 +72,7 @@ def shrink(raw: bytes) -> str:
         img = Image.open(io.BytesIO(raw))
     except Exception as exc:
         raise HTTPException(400, "Image illisible") from exc
-    img = ImageOps.exif_transpose(img).convert("RGB")  # photos iPhone : orientation EXIF
+    img = ImageOps.exif_transpose(img).convert("RGB")  # iPhone photos: EXIF orientation
     img.thumbnail((MAX_SIDE, MAX_SIDE))
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=85)
@@ -88,8 +88,8 @@ app.include_router(invites_router)
 
 @app.middleware("http")
 async def no_stale_files(request, call_next):
-    # Safari (surtout en app écran d'accueil) garde sinon d'anciennes versions de app.js / style.css :
-    # le navigateur doit revalider à chaque fois (réponse 304 rapide si rien n'a changé).
+    # Otherwise Safari (especially as a home-screen app) keeps stale versions of app.js / style.css:
+    # the browser must revalidate every time (fast 304 response if nothing changed).
     response = await call_next(request)
     response.headers.setdefault("Cache-Control", "no-cache")
     return response
@@ -277,7 +277,7 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
 
 @app.put("/api/meals/{meal_id}")
 def update_meal(meal_id: int, meal: Meal, user=Depends(current_user)):
-    """Modifie un repas enregistré (titre, aliments, eau). Garde son heure sauf si eaten_at est fourni."""
+    """Edit a saved meal (title, foods, water). Keeps its time unless eaten_at is given."""
     if not meal.items and meal.water_ml <= 0:
         raise HTTPException(400, "Rien à enregistrer : supprime plutôt le repas")
     kcal = sum(i.grams * i.kcal_100g / 100 for i in meal.items)

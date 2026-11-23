@@ -1,8 +1,8 @@
-"""Dépense énergétique du jour.
+"""Daily energy expenditure.
 
-Deux sources possibles, au choix de chaque utilisateur :
-- strava : métabolisme de base (Mifflin-St Jeor) x mode de vie + calories des activités Strava
-- garmin : résumé quotidien Garmin Connect (repos + actif = total), via la bibliothèque garminconnect
+Two possible sources, chosen by each user:
+- strava: basal metabolic rate (Mifflin-St Jeor) x lifestyle + calories from Strava activities
+- garmin: Garmin Connect daily summary (resting + active = total), via the garminconnect library
 """
 
 import json
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api")
 
 STRAVA_API = "https://www.strava.com/api/v3"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
-TODAY_TTL = timedelta(minutes=10)  # on ne réinterroge Strava/Garmin qu'au plus toutes les 10 min
+TODAY_TTL = timedelta(minutes=10)  # Strava/Garmin are queried again at most every 10 min
 
 ACTIVITY_ICONS = {
     "run": "🏃", "trail": "🏃", "walk": "🚶", "hik": "🥾", "ride": "🚴", "cycl": "🚴", "bik": "🚴",
@@ -39,9 +39,9 @@ def icon_for(kind: str) -> str:
     return next((ic for key, ic in ACTIVITY_ICONS.items() if key in kind), "💪")
 
 
-# ---------- Métabolisme de base ----------
+# ---------- Basal metabolic rate ----------
 def bmr(user) -> float | None:
-    """Mifflin-St Jeor. None si le profil est incomplet."""
+    """Mifflin-St Jeor. None if the profile is incomplete."""
     if not all(user[k] for k in ("sex", "birth_year", "height_cm", "weight_kg")):
         return None
     age = date.today().year - user["birth_year"]
@@ -60,7 +60,7 @@ def _cached(user_id: int, day: date, source: str):
         return None, False
     fetched = datetime.fromisoformat(row["fetched_at"])
     if day < date.today():
-        fresh = fetched.date() > day  # récupéré après la fin de la journée : définitif
+        fresh = fetched.date() > day  # fetched after the day ended: final
     else:
         fresh = datetime.now() - fetched < TODAY_TTL
     return json.loads(row["data"]), fresh
@@ -75,15 +75,15 @@ def _store(user_id: int, day: date, source: str, data) -> None:
 
 
 def _with_cache(user_id: int, day: date, source: str, fetch):
-    """Renvoie (données, avertissement). Sert le cache si le service distant échoue."""
+    """Return (data, warning). Serves the cache if the remote service fails."""
     data, fresh = _cached(user_id, day, source)
     if fresh and any("url" not in a for a in data.get("activities", [])):
-        fresh = False  # cache d'avant les liens vers l'activité : on le rafraîchit une fois
+        fresh = False  # cache from before activity links existed: refresh it once
     if fresh:
         return data, None
     try:
         data = fetch()
-    except Exception as exc:  # réseau, jeton expiré, service en panne…
+    except Exception as exc:  # network, expired token, service down…
         if data is not None:
             return data, f"Données de {source.capitalize()} non actualisées ({exc})"
         raise
@@ -92,7 +92,7 @@ def _with_cache(user_id: int, day: date, source: str, fetch):
 
 
 # ---------- Strava ----------
-_oauth_states: dict[str, tuple[int, float]] = {}  # state -> (user_id, expiration)
+_oauth_states: dict[str, tuple[int, float]] = {}  # state -> (user_id, expiry)
 
 
 def _strava_creds() -> tuple[str, str]:
@@ -151,7 +151,7 @@ def _strava_day(user, day: date) -> dict:
 
 
 def _strava_activity_kcal(client: httpx.Client, summary: dict) -> float:
-    """Les calories ne figurent que dans le détail d'une activité : on les met en cache par activité."""
+    """Calories are only in an activity's details: cache them per activity."""
     aid = summary["id"]
     with db() as conn:
         row = conn.execute("SELECT kcal FROM strava_activity_kcal WHERE activity_id = ?", (aid,)).fetchone()
@@ -160,7 +160,7 @@ def _strava_activity_kcal(client: httpx.Client, summary: dict) -> float:
     r = client.get(f"{STRAVA_API}/activities/{aid}")
     r.raise_for_status()
     detail = r.json()
-    # à défaut de calories (activité sans capteur), l'énergie mécanique d'une sortie vélo ≈ kcal dépensées
+    # without calories (no sensor), a ride's mechanical energy (kJ) ≈ kcal burned
     kcal = float(detail.get("calories") or detail.get("kilojoules") or 0)
     with db() as conn:
         conn.execute("INSERT OR REPLACE INTO strava_activity_kcal (activity_id, kcal) VALUES (?, ?)", (aid, kcal))
@@ -173,7 +173,7 @@ class StravaConfig(BaseModel):
 
 
 def _write_env(values: dict[str, str]) -> None:
-    """Met à jour (ou ajoute) des clés dans ROOT/.env, fichier lisible par le seul propriétaire."""
+    """Update (or add) keys in ROOT/.env, a file readable by its owner only."""
     env = ROOT / ".env"
     lines = env.read_text().splitlines() if env.exists() else []
     remaining = dict(values)
@@ -201,8 +201,8 @@ def strava_config(body: StravaConfig, user=Depends(current_user)):
 
 @router.get("/strava/connect")
 def strava_connect(request: Request, force: bool = False, user=Depends(current_user)):
-    # Strava affiche une page d'erreur brute si l'adresse de retour n'est pas sur le « domaine du rappel »
-    # déclaré chez lui : on retient le domaine qui a marché et on prévient avant d'y envoyer.
+    # Strava shows a raw error page if the redirect address isn't on the "callback domain"
+    # registered there: we remember the domain that worked and warn before sending the user.
     known = os.environ.get("STRAVA_CALLBACK_HOST")
     if known and request.url.hostname != known and not force:
         return RedirectResponse("/?strava=wronghost")
@@ -243,14 +243,14 @@ def strava_callback(request: Request, state: str = "", code: str = "", error: st
         conn.execute("UPDATE users SET energy_source = 'strava' WHERE id = ?", (owner[0],))
         conn.execute("DELETE FROM energy_cache WHERE user_id = ? AND source = 'strava'", (owner[0],))
     if request.url.hostname and os.environ.get("STRAVA_CALLBACK_HOST") != request.url.hostname:
-        _write_env({"STRAVA_CALLBACK_HOST": request.url.hostname})  # domaine accepté par Strava
+        _write_env({"STRAVA_CALLBACK_HOST": request.url.hostname})  # domain accepted by Strava
     return RedirectResponse("/?strava=ok")
 
 
 @router.post("/strava/disconnect")
 def strava_disconnect(user=Depends(current_user)):
     if user["strava_access"]:
-        try:  # révoque aussi l'accès côté Strava
+        try:  # also revokes access on Strava's side
             httpx.post("https://www.strava.com/oauth/deauthorize",
                        data={"access_token": user["strava_access"]}, timeout=10)
         except httpx.HTTPError:
@@ -265,7 +265,7 @@ def strava_disconnect(user=Depends(current_user)):
 
 # ---------- Garmin ----------
 def _garmin_client(user_id: int):
-    from garminconnect import Garmin  # import tardif : la bibliothèque est lourde
+    from garminconnect import Garmin  # late import: the library is heavy
 
     path = garmin_token_dir(user_id)
     if not (path / "garmin_tokens.json").exists():
@@ -291,7 +291,7 @@ def _garmin_day(user, day: date) -> dict:
             "start": a.get("startTimeLocal"),
             "url": f"https://connect.garmin.com/modern/activity/{a['activityId']}" if a.get("activityId") else None,
         })
-    try:  # conserve un jeton éventuellement rafraîchi
+    try:  # keeps a token that may have been refreshed
         client.client.dump(str(path))
     except Exception:
         pass
@@ -303,7 +303,7 @@ def _garmin_day(user, day: date) -> dict:
     }
 
 
-_garmin_mfa: dict[int, tuple[dict, float]] = {}  # user_id -> (état de connexion en attente du code, expiration)
+_garmin_mfa: dict[int, tuple[dict, float]] = {}  # user_id -> (login state waiting for the code, expiry)
 
 
 class GarminLogin(BaseModel):
@@ -320,7 +320,7 @@ def _garmin_error(exc: Exception) -> HTTPException:
     if "TooManyRequests" in name:
         return HTTPException(429, "Garmin bloque temporairement les connexions : réessaie dans quelques minutes")
     if "Authentication" in name:
-        # 400 et non 401 : pour l'app, 401 signifie « session Kcal expirée » et renvoie à l'écran de connexion
+        # 400, not 401: in the app, 401 means "Kcal session expired" and goes back to the login screen
         return HTTPException(400, "Garmin a refusé la connexion : vérifie l'e-mail, le mot de passe ou le code")
     return HTTPException(502, f"Garmin injoignable : {exc}")
 
@@ -338,7 +338,7 @@ def _garmin_save(user_id: int, client) -> None:
 
 @router.post("/garmin/login")
 def garmin_login(body: GarminLogin, user=Depends(current_user)):
-    """Le mot de passe sert uniquement à cette connexion : il n'est ni stocké ni journalisé."""
+    """The password is used for this login only: it is neither stored nor logged."""
     from garminconnect import Garmin
 
     client = Garmin(body.email.strip(), body.password, return_on_mfa=True)
@@ -377,7 +377,7 @@ def garmin_disconnect(user=Depends(current_user)):
     return {"ok": True}
 
 
-# ---------- Synthèse du jour ----------
+# ---------- Daily summary ----------
 @router.get("/energy")
 def energy(day: date | None = None, user=Depends(current_user)):
     day = day or date.today()
@@ -401,7 +401,7 @@ def energy(day: date | None = None, user=Depends(current_user)):
             out["error"] = "Complète ton profil (sexe, année de naissance, taille, poids) dans les réglages"
         else:
             out["burned"] = out["resting"] + out["active"]
-            out["partial"] = False  # la base est comptée pour la journée entière
+            out["partial"] = False  # the basal rate counts for the whole day
 
     elif source == "garmin":
         try:

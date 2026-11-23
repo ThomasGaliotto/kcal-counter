@@ -11,7 +11,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-[hidden] { display: none !important; } /* sinon un display: flex/grid l'emporte sur hidden */
+[hidden] { display: none !important; } /* otherwise a display: flex/grid overrides hidden */
 body {
   margin: 0;
   background: var(--bg);
@@ -24,7 +24,7 @@ button { cursor: pointer; }
 
 .muted { color: var(--muted); font-size: 14px; }
 
-/* ---------- Connexion ---------- */
+/* ---------- Login ---------- */
 .auth {
   position: fixed; inset: 0; z-index: 10; background: var(--bg);
   display: grid; place-items: center; padding: 24px 16px; overflow-y: auto;
@@ -46,7 +46,7 @@ button { cursor: pointer; }
 #auth-form .error { padding: 0; text-align: left; }
 #auth-form .primary { padding: 14px; border-radius: 12px; border: 0; font-weight: 600; margin-top: 6px; }
 
-/* ---------- Menu compte ---------- */
+/* ---------- Account menu ---------- */
 .account-btn {
   position: absolute; right: 16px; top: calc(10px + env(safe-area-inset-top));
   width: 32px; height: 32px; border-radius: 50%; border: 0;
@@ -65,7 +65,7 @@ button { cursor: pointer; }
 }
 .sheet-btn.danger { color: var(--danger); }
 
-/* ---------- Réglages énergie ---------- */
+/* ---------- Energy settings ---------- */
 .settings { max-height: 90vh; overflow-y: auto; }
 .settings h3 { font-size: 15px; margin: 18px 0 8px; color: var(--muted); font-weight: 600; }
 .choices { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -123,7 +123,7 @@ button { cursor: pointer; }
 .conn-panel .error { padding: 0; margin: 0 0 8px; }
 .primary.wide { width: 100%; margin-top: 18px; padding: 14px; border-radius: 12px; border: 0; font-weight: 600; }
 
-/* ---------- En-tête : navigation entre les jours ---------- */
+/* ---------- Header: day navigation ---------- */
 .day {
   position: sticky; top: 0; z-index: 2;
   display: flex; align-items: center; gap: 4px;
@@ -136,7 +136,7 @@ button { cursor: pointer; }
 .nav:disabled { opacity: .25; }
 .day-label { flex: 1; text-align: center; font-weight: 600; font-size: 16px; }
 
-/* ---------- Cartes de synthèse ---------- */
+/* ---------- Summary cards ---------- */
 .cards { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .cards.two { grid-template-columns: 1fr 1fr; }
 .card { background: var(--card); border-radius: 16px; padding: 14px; min-width: 0; }
@@ -163,7 +163,7 @@ button { cursor: pointer; }
 .proj-row b { white-space: nowrap; }
 .proj-row b.over { color: var(--warn); }
 
-/* ---------- Colonnes repas / activités ---------- */
+/* ---------- Meal / activity columns ---------- */
 .columns { margin-top: 18px; display: grid; grid-template-columns: 1fr; gap: 10px; align-items: start; }
 .columns.two { grid-template-columns: 1fr 1fr; }
 .col { min-width: 0; }
@@ -177,12 +177,12 @@ a.meal.activity { display: block; color: inherit; text-decoration: none; }
 a.meal.activity:hover, a.meal.activity:focus-visible { border-color: var(--accent); }
 .act-kcal { color: #fb923c; font-weight: 600; margin-top: 2px; }
 
-/* ---------- Protéines / eau ---------- */
+/* ---------- Protein / water ---------- */
 .minis { margin-top: 10px; }
 .mini-card { border: 0; text-align: left; cursor: pointer; padding: 12px 14px; width: 100%; }
 .mid { font-size: 22px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
 .mid small { font-size: 13px; font-weight: 400; color: var(--muted); }
-/* ---------- Évolution du poids ---------- */
+/* ---------- Weight history ---------- */
 :root { --chart-line: #16a34a; --chart-ref: #8b92a3; --chart-grid: #2a2e38; }
 .goal-btns { display: flex; gap: 6px; }
 .range-chips { margin: 2px 0 12px; }
@@ -218,11 +218,11 @@ a.meal.activity:hover, a.meal.activity:focus-visible { border-color: var(--accen
 .weight-row .delta { color: var(--muted); font-size: 13px; width: 56px; text-align: right; }
 .weight-row button { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 4px; }
 
-/* ---------- Fenêtre de saisie ---------- */
+/* ---------- Input dialog ---------- */
 .ask .field input { font-size: 22px; font-weight: 600; }
 .ask .primary.wide { margin-top: 16px; }
 
-/* ---------- Objectif ---------- */
+/* ---------- Goal ---------- */
 .goal-card, .goal-empty { margin-top: 10px; }
 .goal-empty {
   display: block; width: 100%; border: 1px dashed var(--line); background: transparent;
@@ -275,7 +275,7 @@ main { padding: 16px; max-width: 560px; margin: 0 auto; }
 body.reviewing .fab-bar { display: none; }
 .item label input {
   width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 8px; font-size: 16px; /* 16px : évite le zoom auto d'iOS */
+  border-radius: 8px; padding: 6px 8px; font-size: 16px; /* 16px: avoids iOS auto-zoom */
 }
 .item .kcal { text-align: right; font-weight: 600; white-space: nowrap; }
 .link { background: none; border: 0; color: var(--accent); padding: 12px 0; }
@@ -322,7 +322,7 @@ body.reviewing .fab-bar { display: none; }
   box-shadow: 0 8px 24px rgba(0,0,0,.4); cursor: pointer;
 }
 .fab { width: 72px; height: 72px; background: var(--accent); color: #062b14; }
-/* la galerie se place à droite du bouton principal, qui reste centré */
+/* the gallery button sits right of the main button, which stays centred */
 .fab-small {
   position: absolute; left: calc(100% + 20px); top: 14px;
   width: 44px; height: 44px; background: var(--card); color: var(--text);
@@ -330,7 +330,7 @@ body.reviewing .fab-bar { display: none; }
 }
 .ok-text { color: var(--accent); font-weight: 600; }
 
-/* repas saisi en texte : la description remplace la photo */
+/* meal entered as text: the description replaces the photo */
 .review-text { margin: 0; padding: 14px 16px; color: var(--muted); font-style: italic; border-bottom: 1px solid var(--line); }
 .ask textarea {
   width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
@@ -339,11 +339,11 @@ body.reviewing .fab-bar { display: none; }
 .ask .chips { flex-wrap: wrap; }
 .ask-note { margin: 10px 0 0; min-height: 1.2em; }
 
-/* boutons modifier / supprimer d'un repas enregistré */
+/* edit / delete buttons of a saved meal */
 .meal-actions { display: flex; flex-direction: column; gap: 2px; }
 .meal-actions .edit { background: none; border: 0; font-size: 16px; width: 36px; height: 36px; cursor: pointer; }
 
-/* saisie d'un repas en texte, sous la liste des repas */
+/* text meal entry, below the meal list */
 .add-text {
   display: block; width: 100%; margin-top: 4px; padding: 12px; border-radius: 14px;
   background: transparent; border: 1px dashed var(--line); color: var(--muted); font: inherit; font-size: 14px; cursor: pointer;
@@ -351,10 +351,10 @@ body.reviewing .fab-bar { display: none; }
 .add-text:hover, .add-text:focus-visible { border-color: var(--accent); color: var(--text); }
 body.reviewing .add-text { display: none; }
 
-/* bouton de confirmation d'une suppression */
+/* confirm button for a deletion */
 #ask-submit.danger { background: var(--danger); color: #2a0707; }
 
-/* corriger un plat avec un commentaire */
+/* correct a dish with a comment */
 .fix-row { display: flex; gap: 8px; margin: 4px 0 2px; }
 .fix-row input {
   flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line);
@@ -362,14 +362,14 @@ body.reviewing .add-text { display: none; }
 }
 .fix-row button { white-space: nowrap; }
 
-/* Invitations (administrateur) */
+/* Invitations (administrator) */
 .invite-row { display: flex; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--line); }
 .invite-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .invite-info small { color: var(--muted); font-size: 13px; }
 .invite-row .chip { flex: none; }
 .invite-del { background: none; border: 0; color: var(--muted); font-size: 18px; padding: 0 4px; }
 
-/* Fonctionnalités activables (menu du compte) */
+/* Feature switches (account menu) */
 .features { background: var(--bg); border-radius: 12px; padding: 4px 14px; margin-top: 8px; }
 .features-title { color: var(--muted); font-size: 13px; padding: 8px 0 2px; }
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }

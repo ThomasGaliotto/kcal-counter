@@ -1,4 +1,4 @@
-"""Invitations à usage unique, créées par l'administrateur pour ouvrir un compte."""
+"""Single-use invitations, created by the administrator to open an account."""
 
 import secrets
 from datetime import datetime, timedelta

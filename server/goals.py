@@ -1,11 +1,11 @@
-"""Objectif de poids avec horizon : calcule le bilan calorique et les protéines visés.
+"""Weight goal with a deadline: computes the target calorie balance and protein.
 
-Repères utilisés :
-- 1 kg de masse corporelle ≈ 7 700 kcal
-- perte : rythme plafonné à 1 % du poids par semaine et à 1 000 kcal/jour de déficit
-- prise de muscle : surplus plafonné à +500 kcal/jour (au-delà, surtout du gras), +300 par défaut
-- protéines : 2,0 g/kg en perte (préserver le muscle), 1,8 g/kg en prise de muscle, 1,6 g/kg en maintien
-  (sauf réglage à la main, en grammes ou en g/kg : voir PUT /api/protein)
+Reference values:
+- 1 kg of body mass ≈ 7,700 kcal
+- loss: pace capped at 1 % of body weight per week and at a 1,000 kcal/day deficit
+- muscle gain: surplus capped at +500 kcal/day (beyond that, mostly fat), +300 by default
+- protein: 2.0 g/kg when losing (to preserve muscle), 1.8 g/kg for muscle gain, 1.6 g/kg for maintenance
+  (unless set manually, in grams or g/kg: see PUT /api/protein)
 """
 
 from datetime import date, timedelta
@@ -38,7 +38,7 @@ def current_weight(user_id: int, fallback: float | None) -> float | None:
 
 def compute_plan(goal_type: str, weight: float | None, target: float | None,
                  target_date: date | None, today: date | None = None) -> dict:
-    """Plan quotidien pour un objectif. Fonction pure : testable sans base de données."""
+    """Daily plan for a goal. Pure function: testable without a database."""
     today = today or date.today()
     plan = {
         "type": goal_type, "label": LABELS[goal_type], "balance_goal": DEFAULT_BALANCE[goal_type],
@@ -52,7 +52,7 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
         return plan
 
     days = (target_date - today).days
-    delta = target - weight  # négatif = à perdre
+    delta = target - weight  # negative = to lose
     plan["days_left"] = max(days, 0)
     if (goal_type == "lose" and delta >= 0) or (goal_type == "gain" and delta <= 0):
         plan["message"] = "Poids visé atteint 🎉" if days >= 0 else None
@@ -63,7 +63,7 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
         plan["message"] = "L'horizon est dépassé : choisis une nouvelle date."
         return plan
 
-    needed = delta * KCAL_PER_KG / days  # kcal/jour
+    needed = delta * KCAL_PER_KG / days  # kcal/day
     if goal_type == "lose":
         cap = -min(MAX_LOSS_DEFICIT, weight * 0.01 * KCAL_PER_KG / 7)
         balance = max(needed, cap)
@@ -85,7 +85,7 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
 
 
 def protein_target(user, weight: float | None, plan: dict | None) -> dict:
-    """Objectif de protéines : réglage à la main (g ou g/kg) sinon celui de l'objectif, sinon 1,6 g/kg."""
+    """Protein target: manual setting (g or g/kg), else the goal's, else 1.6 g/kg."""
     if plan and plan["protein_goal"]:
         auto = {"protein_goal": plan["protein_goal"], "protein_per_kg": plan["protein_per_kg"]}
     elif weight:
@@ -119,18 +119,18 @@ def plan_for(user) -> dict | None:
     else:
         plan["progress"] = None
     plan.update(protein_target(user, weight, plan))
-    # objectif kcal en mode « sans dépense mesurée » : métabolisme × vie quotidienne + bilan visé
+    # kcal goal without measured expenditure: BMR × daily activity + target balance
     base = bmr({**dict(user), "weight_kg": weight or user["weight_kg"]})
     plan["kcal_goal"] = round(base * (user["life_factor"] or 1.2) + plan["balance_goal"]) if base else None
     return plan
 
 
 def apply_plan(user_id: int) -> None:
-    """Recopie le plan dans les objectifs utilisés par l'écran (bilan, protéines, kcal)."""
+    """Copy the plan into the targets used by the screen (balance, protein, kcal)."""
     with db() as conn:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     plan = plan_for(user)
-    if not plan:  # sans objectif, seules les protéines suivent le poids / le réglage
+    if not plan:  # without a goal, only protein follows the weight / the setting
         protein = protein_target(user, current_weight(user_id, user["weight_kg"]), None)
         with db() as conn:
             conn.execute("UPDATE users SET protein_goal = ? WHERE id = ?", (protein["protein_goal"], user_id))
@@ -167,7 +167,7 @@ def preview_goal(body: Goal, user=Depends(current_user)):
     weight = body.current_weight or current_weight(user["id"], user["weight_kg"])
     target = body.target_weight if body.type != "maintain" else None
     plan = compute_plan(body.type, weight, target, body.target_date if target else None)
-    plan.update(protein_target(user, weight, plan))  # un réglage à la main reste prioritaire
+    plan.update(protein_target(user, weight, plan))  # a manual setting takes precedence
     return plan
 
 
@@ -206,7 +206,7 @@ class Protein(BaseModel):
 
 @router.put("/protein")
 def set_protein(body: Protein, user=Depends(current_user)):
-    """Objectif de protéines réglé à la main : en grammes par jour ou en g par kg de poids."""
+    """Manual protein target: in grams per day or in g per kg of body weight."""
     if body.mode == "grams" and not (body.value and 20 <= body.value <= 500):
         raise HTTPException(400, "Indique un objectif entre 20 et 500 g par jour")
     if body.mode == "per_kg":
@@ -273,5 +273,5 @@ def _me_with_plan(user_id: int) -> dict:
 
 @router.get("/goal")
 def get_goal(user=Depends(current_user)):
-    apply_plan(user["id"])  # le déficit à tenir évolue avec les jours qui passent
+    apply_plan(user["id"])  # the deficit to keep changes as days go by
     return _me_with_plan(user["id"])
