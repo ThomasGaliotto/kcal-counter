@@ -675,6 +675,83 @@ async function showAuth() {
   setAuthMode(authMode);
 }
 
+// Lien d'invitation (?invite=…) : ouvre directement « Créer un compte » avec le code rempli
+const inviteParam = new URLSearchParams(location.search).get("invite");
+if (inviteParam) {
+  $("auth-invite").value = inviteParam;
+  authMode = "register";
+  history.replaceState(null, "", location.pathname);
+}
+
+// ---------- Invitations (administrateur) ----------
+const fmtShort = (iso) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+
+async function shareInvite(inv) {
+  const text = `${inv.note}, voici ton invitation pour Kcal (valable jusqu'au ${fmtShort(inv.expires_at)})`;
+  if (navigator.share) {
+    try { return await navigator.share({ title: "Invitation Kcal", text, url: inv.link }); }
+    catch (err) { if (err.name === "AbortError") return; }
+  }
+  try {
+    await navigator.clipboard.writeText(inv.link);
+    notice("Le lien est copié : colle-le dans un message.", "Lien copié");
+  } catch {
+    // presse-papiers indisponible (http, navigateur intégré) : lien présélectionné à copier
+    ask({ title: "Copie ce lien", submit: "OK", fields: [{ key: "link", label: "Lien d'invitation", value: inv.link }], onSubmit: () => {} });
+  }
+}
+
+function renderInvites(list) {
+  const box = $("invite-list");
+  box.innerHTML = "";
+  if (!list.length) {
+    box.append(Object.assign(document.createElement("p"), { className: "hint", textContent: "Aucune invitation pour l'instant." }));
+  }
+  for (const inv of list) {
+    const row = document.createElement("div");
+    row.className = "invite-row";
+    row.innerHTML = '<div class="invite-info"><b></b><small></small></div>';
+    row.querySelector("b").textContent = inv.note;
+    row.querySelector("small").textContent =
+      inv.status === "used" ? `✅ Compte créé${inv.used_name ? " par " + inv.used_name : ""} le ${fmtShort(inv.used_at)}`
+      : inv.status === "expired" ? `Expirée le ${fmtShort(inv.expires_at)}`
+      : `En attente · expire le ${fmtShort(inv.expires_at)}`;
+    if (inv.status === "pending") {
+      const share = Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: "Partager" });
+      share.onclick = () => shareInvite(inv);
+      row.append(share);
+    }
+    if (inv.status !== "used") {
+      const del = Object.assign(document.createElement("button"), { type: "button", className: "invite-del", textContent: "🗑" });
+      del.setAttribute("aria-label", "Supprimer l'invitation");
+      del.onclick = async () => {
+        if (!(await confirmBox(`Supprimer l'invitation de ${inv.note} ? Le lien ne marchera plus.`))) return;
+        renderInvites(await api(`/api/invites/${encodeURIComponent(inv.code)}`, { method: "DELETE" }));
+      };
+      row.append(del);
+    }
+    box.append(row);
+  }
+}
+
+$("open-invites").onclick = async () => {
+  $("account").close();
+  $("invites-dialog").showModal();
+  try { renderInvites(await api("/api/invites")); } catch (err) { notice(err.message, "Erreur"); }
+};
+$("invites-close").onclick = () => $("invites-dialog").close();
+$("invite-new").onclick = () => ask({
+  title: "Nouvelle invitation",
+  submit: "Créer le lien",
+  fields: [{ key: "note", label: "Prénom de la personne", value: "" }],
+  onSubmit: async ({ note }) => {
+    const res = await api("/api/invites", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }),
+    });
+    renderInvites(res.invites); // la nouvelle invitation est en haut, avec « Partager »
+  },
+});
+
 $("auth-form").onsubmit = async (e) => {
   e.preventDefault();
   const body = { email: $("auth-email").value, password: $("auth-password").value };
@@ -707,6 +784,7 @@ function authError(msg) {
 $("account-btn").onclick = () => {
   $("account-name").textContent = me.name;
   $("account-email").textContent = me.email;
+  $("open-invites").hidden = !me.is_admin;
   $("account").showModal();
 };
 $("account-close").onclick = () => $("account").close();

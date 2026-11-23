@@ -13,10 +13,12 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 from .db import db, garmin_token_dir
+from .limits import limit_auth
 
 COOKIE = "kcal_session"
 SESSION_DAYS = 180  # l'iPhone reste connecté ~6 mois
-INVITE_CODE = os.environ.get("KCAL_INVITE_CODE", "")
+INVITE_CODE = os.environ.get("KCAL_INVITE_CODE", "")  # code partagé facultatif, en plus des invitations
+OPEN_SIGNUP = os.environ.get("KCAL_OPEN_SIGNUP") == "1"  # 1 = inscription libre, sans invitation
 
 router = APIRouter(prefix="/api")
 
@@ -126,15 +128,21 @@ class PasswordChange(BaseModel):
     new: str = Field(min_length=8, max_length=200)
 
 
+def _has_users() -> bool:
+    with db() as conn:
+        return conn.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
+
+
 @router.get("/auth/config")
 def auth_config():
-    return {"invite_required": bool(INVITE_CODE)}
+    # Le tout premier compte (l'administrateur) se crée sans invitation
+    return {"invite_required": not OPEN_SIGNUP and _has_users()}
 
 
-@router.post("/auth/register")
+@router.post("/auth/register", dependencies=[Depends(limit_auth)])
 def register(body: Register, request: Request, response: Response):
-    if INVITE_CODE and not hmac.compare_digest(body.invite_code.strip(), INVITE_CODE):
-        raise HTTPException(403, "Code d'invitation incorrect")
+    code = body.invite_code.strip()
+    shared = bool(INVITE_CODE) and hmac.compare_digest(code, INVITE_CODE)
     email = body.email.strip().lower()
     if "@" not in email:
         raise HTTPException(400, "Adresse e-mail invalide")
@@ -142,11 +150,24 @@ def register(body: Register, request: Request, response: Response):
         if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
             raise HTTPException(409, "Un compte existe déjà avec cet e-mail")
         first = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        need_invite = not (first or OPEN_SIGNUP or shared)
+        if need_invite and not conn.execute(
+            "SELECT 1 FROM invites WHERE code = ? AND used_by IS NULL AND expires_at > ?",
+            (code, datetime.now().isoformat()),
+        ).fetchone():
+            raise HTTPException(403, "Invitation invalide, déjà utilisée ou expirée")
         cur = conn.execute(
             "INSERT INTO users (email, name, pw_hash, created_at) VALUES (?, ?, ?, ?)",
             (email, body.name.strip(), hash_password(body.password), datetime.now().isoformat()),
         )
         user_id = cur.lastrowid
+        if need_invite:  # l'invitation ne sert qu'une fois (vérifié à nouveau contre les doubles envois)
+            used = conn.execute(
+                "UPDATE invites SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL",
+                (user_id, datetime.now().isoformat(), code),
+            )
+            if used.rowcount != 1:
+                raise HTTPException(403, "Invitation déjà utilisée")
         if first:  # le premier compte récupère l'historique d'avant les comptes
             conn.execute("UPDATE meals SET user_id = ? WHERE user_id IS NULL", (user_id,))
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -154,7 +175,7 @@ def register(body: Register, request: Request, response: Response):
     return _public(user)
 
 
-@router.post("/auth/login")
+@router.post("/auth/login", dependencies=[Depends(limit_auth)])
 async def login(body: Login, request: Request, response: Response):
     with db() as conn:
         user = conn.execute("SELECT * FROM users WHERE email = ?", (body.email.strip().lower(),)).fetchone()

@@ -1,0 +1,7 @@
+[Unit]
+Description=Kcal - sauvegarde de la base
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/thomas/Documents/kcal-counter
+ExecStart=/home/thomas/Documents/kcal-counter/.venv/bin/python -m server.backup

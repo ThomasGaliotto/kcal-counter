@@ -112,6 +112,15 @@ def db() -> sqlite3.Connection:
             kg REAL NOT NULL,
             PRIMARY KEY (user_id, day)
         );
+        CREATE TABLE IF NOT EXISTS invites (
+            code TEXT PRIMARY KEY,
+            note TEXT NOT NULL,                -- pour qui (prénom)
+            created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            used_at TEXT
+        );
         CREATE TABLE IF NOT EXISTS strava_activity_kcal (
             activity_id INTEGER PRIMARY KEY,
             kcal REAL NOT NULL

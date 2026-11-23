@@ -17,11 +17,14 @@ from .auth import current_user
 from .auth import router as auth_router
 from .db import ROOT, db
 from .energy import router as energy_router
+from .limits import ai_limit
 from .goals import router as goals_router
+from .invites import router as invites_router
 
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:9b")
+MAX_UPLOAD = 20 * 1024 * 1024  # photo envoyée : 20 Mo max
 MAX_SIDE = 1024  # on réduit la photo : plus rapide, et suffisant pour reconnaître un plat
 
 PROMPT = """Tu es un nutritionniste. Analyse la photo de ce repas.
@@ -80,6 +83,7 @@ app = FastAPI(title="kcal-counter")
 app.include_router(auth_router)
 app.include_router(energy_router)
 app.include_router(goals_router)
+app.include_router(invites_router)
 
 
 @app.middleware("http")
@@ -148,7 +152,11 @@ async def ask_model(message: dict) -> dict:
 
 @app.post("/api/analyze")
 async def analyze(photo: UploadFile = File(...), user=Depends(current_user)):
-    image_b64 = shrink(await photo.read())
+    ai_limit.check(f"user:{user['id']}")
+    raw = await photo.read(MAX_UPLOAD + 1)
+    if len(raw) > MAX_UPLOAD:
+        raise HTTPException(413, "Photo trop lourde (20 Mo max)")
+    image_b64 = shrink(raw)
     return await ask_model({"role": "user", "content": PROMPT, "images": [image_b64]})
 
 
@@ -158,6 +166,7 @@ class MealText(BaseModel):
 
 @app.post("/api/analyze-text")
 async def analyze_text(body: MealText, user=Depends(current_user)):
+    ai_limit.check(f"user:{user['id']}")
     """Repas décrit en texte (« une pomme et un verre d'eau ») : même format que l'analyse photo."""
     return await ask_model({"role": "user", "content": TEXT_PROMPT + body.text.strip()})
 
@@ -206,6 +215,7 @@ class MealFix(BaseModel):
 
 @app.post("/api/analyze-fix")
 async def analyze_fix(body: MealFix, user=Depends(current_user)):
+    ai_limit.check(f"user:{user['id']}")
     """Corrige un repas d'après un commentaire (« pas de riz mais des pâtes ») et recalcule tout."""
     current = json.dumps({"title": body.title, "water_ml": body.water_ml,
                           "items": [i.model_dump() for i in body.items]}, ensure_ascii=False)
@@ -219,6 +229,7 @@ class ItemQuery(BaseModel):
 
 @app.post("/api/estimate-item")
 async def estimate_item(body: ItemQuery, user=Depends(current_user)):
+    ai_limit.check(f"user:{user['id']}")
     """Valeurs nutritionnelles d'un aliment ajouté ou renommé à la main."""
     grams = (f"garde {round(body.grams)}" if body.grams
              else "la portion habituelle en grammes (ex : pomme 150, yaourt 125, assiette de pâtes cuites 250)")

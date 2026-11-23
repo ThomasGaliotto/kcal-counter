@@ -42,6 +42,7 @@
     <button id="open-goal" class="sheet-btn">🎯 Mon objectif</button>
     <button id="open-weights" class="sheet-btn">📈 Évolution du poids</button>
     <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
+    <button id="open-invites" class="sheet-btn" hidden>✉️ Inviter quelqu'un</button>
     <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
   </dialog>
@@ -57,6 +58,17 @@
       <p id="ask-error" class="error" hidden></p>
       <button id="ask-submit" type="submit" class="primary wide">Valider</button>
     </form>
+  </dialog>
+
+  <dialog id="invites-dialog" class="sheet settings">
+    <div class="sheet-head">
+      <strong>✉️ Invitations</strong>
+      <button id="invites-close" type="button" class="remove" aria-label="Fermer">×</button>
+    </div>
+    <p class="hint">Chaque lien permet de créer un seul compte et expire au bout de 7 jours.</p>
+    <button id="invite-new" type="button" class="primary wide">Créer une invitation</button>
+    <h3>Invitations envoyées</h3>
+    <div id="invite-list" class="invite-list"></div>
   </dialog>
 
   <dialog id="weights-dialog" class="sheet settings weights">
