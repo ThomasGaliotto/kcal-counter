@@ -441,3 +441,56 @@ body.reviewing .add-text { display: none; }
 .ob-nav .primary { flex: 1; padding: 14px; border-radius: 12px; border: 0; font-weight: 600; }
 .ob-secondary { padding: 14px 18px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--text); }
 #onboard .error { margin: 0 16px; }
+
+/* ---------- Barcode scanner ---------- */
+#scan-btn { left: auto; right: calc(100% + 20px); } /* mirror of the gallery button, left of the main one */
+.scan-view { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 4 / 3; }
+.scan-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-frame {
+  position: absolute; left: 12%; right: 12%; top: 32%; bottom: 32%;
+  border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 999px rgba(0,0,0,.35);
+}
+.scan .fix-row { margin-top: 4px; }
+.small-print { font-size: 12px; }
+.small-print a { color: var(--muted); }
+
+/* ---------- Dictation ---------- */
+.mic-btn {
+  margin-top: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 14px; font-size: 14px;
+}
+.mic-btn.listening { border-color: var(--danger); color: var(--danger); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
+
+/* ---------- Weekly summary and streak ---------- */
+.week-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px; margin-top: 12px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; text-align: left;
+}
+.week-btn-label { flex: 1; color: var(--muted); font-size: 15px; }
+.week-btn .chev { color: var(--muted); font-size: 20px; line-height: 1; }
+.streak-badge {
+  background: rgba(251, 146, 60, .14); color: #fdba74; border-radius: 999px; padding: 3px 10px;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.week-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.week-nav span { font-weight: 600; }
+.week-nav .nav:disabled { opacity: .3; }
+.week-streak { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; font-size: 15px; }
+.week-streak small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+#week-chart { display: block; width: 100%; height: auto; }
+#week-chart .bar-hit { fill: transparent; cursor: pointer; }
+#week-chart .wbar { fill: var(--accent); }
+#week-chart .wbar.over { fill: var(--warn); }
+#week-chart .wbar.today { opacity: .55; }
+#week-chart .wgoal { stroke: var(--text); stroke-width: 2; stroke-linecap: round; opacity: .55; }
+#week-chart .wday { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+#week-chart .wday.sel { fill: var(--text); font-weight: 700; }
+#week-chart .wnone { fill: var(--line); }
+#week-chart .sel-bg { fill: var(--card); }
+.week-key { display: flex; gap: 16px; justify-content: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
+.week-key i { display: inline-block; vertical-align: middle; margin-right: 6px; }
+.key-bar { width: 8px; height: 12px; border-radius: 3px 3px 0 0; background: var(--accent); }
+.key-goal { width: 14px; height: 2px; border-radius: 1px; background: var(--text); opacity: .55; }
+.week-detail { min-height: 2.6em; margin: 8px 2px; font-size: 14px; color: var(--muted); line-height: 1.35; }
+.week-detail b { color: var(--text); }

@@ -129,6 +129,11 @@ def db() -> sqlite3.Connection:
             used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
             used_at TEXT
         );
+        CREATE TABLE IF NOT EXISTS barcode_cache (
+            code TEXT PRIMARY KEY,             -- EAN/UPC
+            data TEXT NOT NULL,                -- product as an item (JSON), from Open Food Facts
+            fetched_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS strava_activity_kcal (
             activity_id INTEGER PRIMARY KEY,
             kcal REAL NOT NULL

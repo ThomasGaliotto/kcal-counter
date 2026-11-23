@@ -74,6 +74,7 @@ async function loadDay() {
   $("energy-warn").textContent = warn ? "⚠️ " + warn : "";
 
   renderGoalCard();
+  renderStreak();
 
   // ----- Protein
   const pGoal = proteinGoal();
@@ -340,7 +341,7 @@ async function onPhoto(e) {
 $("text-btn").onclick = () => ask({
   title: "✍️ Ajouter en texte",
   submit: "Analyser",
-  fields: [{ key: "text", type: "textarea", label: "Qu'as-tu mangé ou bu ?",
+  fields: [{ key: "text", type: "textarea", label: "Qu'as-tu mangé ou bu ?", voice: true,
              placeholder: "ex : une pomme, un yaourt et un verre d'eau" }],
   onSubmit: ({ text }) => {
     analyze(() => api("/api/analyze-text", {
@@ -348,6 +349,248 @@ $("text-btn").onclick = () => ask({
     }), { text });
   },
 });
+
+// ---------- Dictation (Web Speech API; on iPhone the keyboard's 🎤 key also works) ----------
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+
+function micButton(input) {
+  if (!SpeechRec) {
+    return Object.assign(document.createElement("p"), {
+      className: "hint", textContent: "Astuce : la touche 🎤 du clavier permet de dicter.",
+    });
+  }
+  const btn = Object.assign(document.createElement("button"), { type: "button", className: "mic-btn", textContent: "🎤 Dicter" });
+  btn.onclick = () => (recognition ? recognition.stop() : dictate(input, btn));
+  return btn;
+}
+
+function dictate(input, btn) {
+  const rec = new SpeechRec();
+  rec.lang = "fr-FR";
+  rec.interimResults = true;
+  const before = input.value.trim() ? input.value.trim() + " " : "";
+  rec.onresult = (e) => {
+    input.value = before + Array.from(e.results, (r) => r[0].transcript).join("");
+    input.dispatchEvent(new Event("input"));
+  };
+  rec.onerror = (e) => showAskError(
+    e.error === "no-speech" ? "Je n'ai rien entendu, réessaie."
+    : e.error === "not-allowed" || e.error === "service-not-allowed" ? "Micro refusé : autorise-le, ou utilise la touche 🎤 du clavier."
+    : "Dictée indisponible ici : utilise la touche 🎤 du clavier.");
+  rec.onend = () => {
+    recognition = null;
+    btn.classList.remove("listening");
+    btn.textContent = "🎤 Dicter";
+  };
+  recognition = rec;
+  btn.classList.add("listening");
+  btn.textContent = "⏹ Arrêter";
+  $("ask-error").hidden = true;
+  rec.start();
+}
+function stopDictation() { recognition?.abort(); }
+
+// ---------- Barcode -> Open Food Facts ----------
+let scanReader = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = Object.assign(document.createElement("script"), { src, onload: resolve });
+    el.onerror = () => reject(new Error("lecteur de code-barres introuvable"));
+    document.head.append(el);
+  });
+}
+
+const scanStatus = (msg) => ($("scan-status").textContent = msg);
+
+$("scan-btn").onclick = async () => {
+  $("scan-code").value = "";
+  scanStatus("Vise le code-barres du produit.");
+  $("scan-dialog").showModal();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return scanStatus("Caméra indisponible ici (il faut passer par HTTPS) : tape les chiffres du code.");
+  }
+  try {
+    if (!window.ZXing) await loadScript("vendor/zxing.min.js");
+    if (!$("scan-dialog").open) return;
+    const Z = window.ZXing;
+    const hints = new Map([[Z.DecodeHintType.POSSIBLE_FORMATS,
+      [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E]]]);
+    scanReader = new Z.BrowserMultiFormatReader(hints, 300);
+    await scanReader.decodeFromConstraints({ video: { facingMode: "environment" } }, $("scan-video"), (result) => {
+      if (result && scanReader) lookupBarcode(result.getText());
+    });
+  } catch (err) {
+    stopScanner();
+    scanStatus(err.name === "NotAllowedError" ? "Caméra refusée : autorise-la dans les réglages, ou tape les chiffres du code."
+               : `Caméra indisponible (${err.message}) : tape les chiffres du code.`);
+  }
+};
+function stopScanner() {
+  scanReader?.reset();
+  scanReader = null;
+}
+$("scan-close").onclick = () => $("scan-dialog").close();
+$("scan-dialog").addEventListener("close", stopScanner);
+$("scan-form").onsubmit = (e) => {
+  e.preventDefault();
+  const code = $("scan-code").value.replace(/\D/g, "");
+  if (code.length < 8 || code.length > 14) return scanStatus("Un code-barres a 8 à 14 chiffres.");
+  lookupBarcode(code);
+};
+
+function lookupBarcode(code) {
+  navigator.vibrate?.(40);
+  stopScanner();
+  $("scan-dialog").close();
+  analyze(async () => {
+    try {
+      const { item, quantity } = await api(`/api/barcode/${code}`);
+      $("review-text").textContent = `📦 ${item.name}${quantity ? ` (${quantity})` : ""} — ajuste la quantité`;
+      return { title: item.name, items: [item], water_ml: item.drink_ml || 0 };
+    } catch (err) {
+      throw new Error(`${err.message}. Ajoute-le avec « + Aliment » ou décris-le en texte.`);
+    }
+  }, { caption: `📦 Code-barres ${code}` });
+}
+
+// ---------- Streak ----------
+const MILESTONES = [3, 7, 14, 30, 60, 100, 200, 365];
+const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
+async function renderStreak() {
+  const st = await api("/api/streak").catch(() => null);
+  if (!st) return null;
+  $("streak-badge").hidden = st.current < 2;
+  $("streak-badge").textContent = `🔥 ${st.current} j`;
+  $("streak-badge").title = `${plural(st.current, "jour")} de suite`;
+  return st;
+}
+
+// After saving a meal: celebrate each milestone once
+async function celebrateStreak() {
+  const st = await renderStreak();
+  if (!st || !st.today_logged || !MILESTONES.includes(st.current)) return;
+  const key = `kcal-streak-${me.id}`;
+  try {
+    if (localStorage.getItem(key) === `${todayISO()}:${st.current}`) return;
+    localStorage.setItem(key, `${todayISO()}:${st.current}`);
+  } catch {}
+  const record = st.current >= st.best ? " C'est ton record." : "";
+  const next = st.next_milestone ? `\nProchain palier : ${st.next_milestone} jours.` : "";
+  notice(`${plural(st.current, "jour")} de suite à tout noter, bravo !${record}${next}`, "🔥 Série en cours");
+}
+
+// ---------- Weekly summary ----------
+let weekEnd = null;
+let weekData = null;
+const WEEKDAY = ["D", "L", "M", "M", "J", "V", "S"];
+const longDay = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
+const liters = (ml) => fmt(Math.round(ml / 100) / 10);
+
+async function openWeek() {
+  if ($("account").open) $("account").close();
+  weekEnd = todayISO();
+  $("week-dialog").showModal();
+  await renderWeek();
+}
+$("week-btn").onclick = openWeek;
+$("open-week").onclick = openWeek;
+$("week-close").onclick = () => $("week-dialog").close();
+$("week-prev").onclick = () => { weekEnd = shiftDay(weekEnd, -7); renderWeek(); };
+$("week-next").onclick = () => { if (weekEnd < todayISO()) { weekEnd = shiftDay(weekEnd, 7); renderWeek(); } };
+
+async function renderWeek() {
+  const end = weekEnd;
+  $("week-range").textContent = `${fmtShort(shiftDay(end, -6) + "T12:00:00")} – ${fmtShort(end + "T12:00:00")}`;
+  $("week-next").disabled = end >= todayISO();
+  $("week-detail").textContent = "Chargement…";
+  let w;
+  try {
+    w = await api(`/api/week?end=${end}`);
+  } catch (err) {
+    $("week-detail").textContent = err.message;
+    return;
+  }
+  if (end !== weekEnd) return; // moved to another week meanwhile
+  weekData = w;
+
+  const st = w.streak;
+  $("week-streak").innerHTML = st.current
+    ? `🔥 <b>${plural(st.current, "jour")} de suite</b><small>Record : ${plural(st.best, "jour")}` +
+      `${st.next_milestone ? ` · prochain palier à ${st.next_milestone}` : ""}` +
+      `${st.today_logged ? "" : " · note un repas aujourd'hui pour la prolonger"}</small>`
+    : `Pas de série en cours<small>Note tes repas chaque jour pour en lancer une` +
+      `${st.best ? ` (record : ${plural(st.best, "jour")})` : ""}.</small>`;
+
+  drawWeekChart(w);
+  const last = [...w.days].reverse().find((d) => d.logged);
+  selectWeekDay(last ? w.days.indexOf(last) : 6);
+
+  const tiles = [];
+  const tile = (label, value, sub = "") => tiles.push(`<div><small>${label}</small><b>${value}</b>${sub ? `<small>${sub}</small>` : ""}</div>`);
+  tile("Moyenne", w.avg_kcal != null ? `${fmt(w.avg_kcal)} kcal` : "—", w.avg_goal ? `/ jour · visé ~${fmt(w.avg_goal)}` : "par jour noté");
+  tile("Jours notés", `${w.logged_days} / 7`);
+  tile("Dans l'objectif", w.judged_days ? `${w.on_target_days} / ${w.judged_days}` : "—",
+       { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[w.direction]);
+  if (w.avg_kcal != null && w.prev_avg_kcal != null) tile("vs semaine d'avant", `${signed(w.avg_kcal - w.prev_avg_kcal)} kcal`, "par jour");
+  if (me.show_protein && w.avg_protein_g != null) tile("Protéines", `${fmt(w.avg_protein_g)} g`, `/ jour · visé ${fmt(proteinGoal())}`);
+  if (w.avg_water_ml != null) tile("Eau", `${liters(w.avg_water_ml)} L`, "par jour");
+  if (me.show_weight && w.weight) {
+    const c = w.weight.change;
+    tile("Poids", `${c > 0 ? "+" : c < 0 ? "−" : ""}${fmtKg(Math.abs(c))} kg`, `${fmtKg(w.weight.from)} → ${fmtKg(w.weight.to)}`);
+  }
+  $("week-stats").innerHTML = tiles.join("");
+}
+
+function drawWeekChart(w) {
+  const svg = $("week-chart");
+  const W = 320, H = 150, top = 14, base = 124, slot = W / 7, bw = 20, r = 4;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = "";
+  const max = Math.max(1, ...w.days.map((d) => Math.max(d.kcal, d.goal || 0))) * 1.08;
+  const y = (v) => base - (v / max) * (base - top);
+  const today = todayISO();
+  w.days.forEach((d, i) => {
+    const cx = slot * i + slot / 2, x0 = cx - bw / 2, x1 = cx + bw / 2;
+    svgEl("rect", { class: "sel-bg", x: cx - slot / 2 + 2, y: 2, width: slot - 4, height: H - 4, rx: 10, opacity: 0, "data-i": i }, svg);
+    if (d.logged) {
+      // rounded top, square base on the baseline
+      const yt = Math.min(y(d.kcal), base - r);
+      svgEl("path", {
+        class: `wbar${d.on_target === false ? " over" : ""}${d.day === today ? " today" : ""}`,
+        d: `M${x0},${base} V${yt + r} Q${x0},${yt} ${x0 + r},${yt} H${x1 - r} Q${x1},${yt} ${x1},${yt + r} V${base} Z`,
+      }, svg);
+    } else {
+      svgEl("rect", { class: "wnone", x: x0, y: base - 2, width: bw, height: 2, rx: 1 }, svg);
+    }
+    if (d.goal) svgEl("line", { class: "wgoal", x1: x0 - 5, x2: x1 + 5, y1: y(d.goal), y2: y(d.goal) }, svg);
+    const label = svgEl("text", { class: "wday", x: cx, y: base + 18, "data-i": i }, svg);
+    label.textContent = WEEKDAY[new Date(d.day + "T12:00:00").getDay()];
+    const hit = svgEl("rect", { class: "bar-hit", x: cx - slot / 2, y: 0, width: slot, height: H }, svg);
+    hit.onclick = () => selectWeekDay(i);
+    hit.onmouseenter = () => selectWeekDay(i);
+  });
+}
+
+function selectWeekDay(i) {
+  const d = weekData?.days[i];
+  if (!d) return;
+  $("week-chart").querySelectorAll(".sel-bg").forEach((el) => el.setAttribute("opacity", Number(el.dataset.i) === i ? 1 : 0));
+  $("week-chart").querySelectorAll(".wday").forEach((el) => el.classList.toggle("sel", Number(el.dataset.i) === i));
+  const name = longDay(d.day);
+  if (!d.logged) {
+    $("week-detail").innerHTML = `<b>${name}</b><br>Rien de noté.`;
+    return;
+  }
+  const verdict = d.on_target === true ? " · dans l'objectif ✓"
+    : d.on_target === false ? " · hors objectif" : d.day === todayISO() ? " · journée en cours" : "";
+  const bits = [`<b>${fmt(d.kcal)} kcal</b>${d.goal ? ` / ${fmt(d.goal)} visés` : ""}${verdict}`];
+  if (me.show_protein) bits.push(`${fmt(d.protein_g)} g de protéines`);
+  if (d.water_ml) bits.push(`💧 ${liters(d.water_ml)} L`);
+  $("week-detail").innerHTML = `<b>${name}</b><br>${bits.join(" · ")}`;
+}
 
 // Edit a saved meal: same screen as the review after analysis
 function editMeal(m) {
@@ -364,15 +607,15 @@ function editMeal(m) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-async function analyze(request, { image, text }) {
+async function analyze(request, { image, text, caption }) {
   draft = null;
   $("review").hidden = false;
   document.body.classList.add("reviewing");
   $("empty").hidden = true;
   $("preview").hidden = !image;
   if (image) $("preview").src = image;
-  $("review-text").hidden = !text;
-  $("review-text").textContent = text ? `« ${text} »` : "";
+  $("review-text").hidden = !(text || caption);
+  $("review-text").textContent = caption || (text ? `« ${text} »` : "");
   $("analyzing").hidden = false;
   $("result").hidden = true;
   $("error").hidden = true;
@@ -538,7 +781,9 @@ $("save").onclick = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: draft.title || (items.length ? "Repas" : "Eau"), items, water_ml, eaten_at }),
     });
+    const isNew = !draft.id && items.length;
     closeReview();
+    if (isNew) celebrateStreak();
   } catch (err) {
     notice(err.message, "Erreur");
   } finally {
@@ -596,6 +841,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
     if (f.type === "textarea") {
       input.rows = 3;
       input.placeholder = f.placeholder || "";
+      if (f.voice) label.dataset.voice = "1";
     } else {
       input.type = f.type === "number" ? "text" : f.type || "text";
     }
@@ -617,6 +863,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
       label.append(input);
     }
     box.append(label);
+    if (label.dataset.voice) box.append(micButton(input));
   }
   $("ask-form").onsubmit = async (e) => {
     e.preventDefault();
@@ -649,6 +896,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
     }
   };
   $("ask-close").onclick = () => dlg.close();
+  dlg.addEventListener("close", stopDictation, { once: true });
   changed();
   dlg.showModal();
   const first = Object.values(ui).find((u) => u.input && !u.label.hidden)?.input;

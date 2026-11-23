@@ -15,11 +15,13 @@ The small **i** buttons on the cards explain how each number is computed.
 - `server/auth.py`: accounts (e-mail + password), cookie sessions
 - `server/invites.py`: single-use invitation links, created by the admin
 - `server/goals.py`: weight goal, weigh-ins, protein target
+- `server/barcode.py`: packaged products by barcode (Open Food Facts)
+- `server/stats.py`: weekly summary and logging streaks
 - `server/energy.py`: energy expenditure from Strava or Garmin
 - `server/limits.py`: rate limits (login attempts, AI analyses)
 - `server/db.py`: SQLite database `data/kcal.db` and migrations
 - `server/backup.py`: nightly database backup
-- `web/`: the web app (PWA) for the iPhone
+- `web/`: the web app (PWA) for the iPhone; `web/vendor/` holds the ZXing barcode reader (Apache-2.0)
 
 > The app's interface is in French.
 
@@ -34,6 +36,11 @@ account menu → **🦊 Reprendre la configuration** opens it again. Accounts cr
 
 - **Photo**: take or pick a picture; the model lists each food with grams, kcal/100 g and protein/100 g.
 - **Text**: "✍️ Ajouter un repas en texte" under the meal list, e.g. *"an apple, 2 hard-boiled eggs and a large glass of water"*.
+  **🎤 Dicter** fills it by voice (Web Speech API); on the iPhone the keyboard's 🎤 key works too.
+- **Barcode**: the button left of the camera scans a packaged product (EAN/UPC) with the camera, or takes the digits typed in.
+  Values per 100 g come from [Open Food Facts](https://world.openfoodfacts.org) (only the barcode is sent; answers are
+  cached 30 days). The portion is one serving, the whole pack for single units (can, yogurt…), otherwise 100 g or a glass.
+  The camera needs HTTPS (or `localhost`).
 - **Review before saving**: every ingredient can be edited. Renaming an ingredient or adding a new one
   re-estimates its values automatically.
 - **Correct the whole dish** with a comment, e.g. *"no rice, it was fries"*: the model recalculates every item.
@@ -58,6 +65,17 @@ Everyone has their own log and goals, stored on the server.
 - 10 login or sign-up attempts per IP address every 15 minutes.
 - 60 AI analyses per account per hour (photo, text, correction, ingredient), to keep the GPU available.
 - Uploaded photos are limited to 20 MB.
+
+## Weekly summary and streaks
+
+**📊 Bilan de la semaine** (under the cards, or in the account menu) shows the last 7 days: calories eaten per day
+against that day's goal, average intake (and versus the week before), days logged, days on target, average protein
+and water, and the weight change. Arrows move week by week.
+
+- A day is **on target** when under its goal (+5 %) for weight loss, above it (−5 %) for muscle gain, within ±10 % for
+  maintenance. Today isn't judged until it's over.
+- **Streak** 🔥: consecutive days with at least one meal logged (water alone doesn't count). Today not logged yet doesn't
+  break it. Milestones (3, 7, 14, 30, 60, 100, 200, 365 days) are celebrated once when saving a meal.
 
 ## Goal (weight loss, maintenance, muscle gain)
 

@@ -16,12 +16,14 @@ from pydantic import BaseModel, Field
 
 from .auth import current_user
 from .auth import router as auth_router
+from .barcode import router as barcode_router
 from .db import ROOT, db
 from .energy import router as energy_router
 from .limits import ai_limit
 from .goals import router as goals_router
 from .invites import router as invites_router
 from .metabolism import router as metabolism_router
+from .stats import router as stats_router
 
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -102,6 +104,8 @@ app.include_router(energy_router)
 app.include_router(goals_router)
 app.include_router(invites_router)
 app.include_router(metabolism_router)
+app.include_router(barcode_router)
+app.include_router(stats_router)
 
 
 @app.middleware("http")
