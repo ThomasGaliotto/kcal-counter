@@ -948,82 +948,106 @@ function spline(pts, closed) {
   }
   return d + (closed ? " Z" : "");
 }
-
-// Body widths (half-widths from the centre line x = 50) per level 1 (very lean) … 5 (heavy)
-const SHAPES = {
+// Side view (facing right). Offsets from the body axis x = 50: positive = front, negative = back.
+// Level 1 = very lean … 5 = heavy; "def" = how visible the muscle lines are.
+const PROFILE = {
   m: {
-    shoulder: [15.5, 18.5, 17, 18, 19.5], chest: [12.5, 15.5, 14.5, 16.5, 19],
-    waist: [10, 11.5, 12.5, 16, 20], belly: [10, 11.5, 13, 17.5, 22], hip: [11.5, 12.5, 13.2, 15.5, 18.5],
-    thigh: [6.2, 7.6, 7.6, 9, 10.6], calf: [4.4, 5.4, 5.2, 6, 7], arm: [3.4, 4.6, 4.2, 5, 6], neck: [3.6, 4.4, 4.1, 4.5, 5.2],
+    chest: [8.4, 12.4, 8.6, 9.8, 11], belly: [5.2, 6.4, 8.2, 12.5, 16.5], back: [-7.8, -11, -7.8, -8.8, -10],
+    waist: [-4.8, -5.8, -5.8, -6.8, -8.2], glute: [-7.8, -10.6, -8.6, -10.4, -12.4],
+    quad: [6.2, 9, 6.6, 7.9, 9.4], ham: [-5.2, -7.2, -5.9, -7.2, -8.8], calf: [-4.2, -6.2, -4.6, -5, -5.8],
+    delt: [3.9, 6.2, 4.1, 4.5, 5.1], bicep: [3, 5, 3.1, 3.4, 3.9], fore: [2.2, 3.2, 2.3, 2.5, 2.9],
+    def: [1, 1, 0.55, 0.2, 0],
   },
   f: {
-    shoulder: [13.5, 14.5, 14.5, 15.5, 17], chest: [12, 13, 13.5, 15.5, 18],
-    waist: [8.6, 9.6, 10.8, 13.8, 17], belly: [9.5, 10.5, 12, 15.5, 19], hip: [13.5, 14.5, 15.8, 18, 21],
-    thigh: [6.4, 7.4, 8, 9.4, 11.2], calf: [4.2, 4.9, 5.1, 5.9, 6.9], arm: [3, 3.6, 3.7, 4.4, 5.4], neck: [3.2, 3.5, 3.5, 3.9, 4.5],
+    chest: [8.2, 9.4, 9.6, 11.2, 13.2], belly: [4.8, 5.4, 7.2, 10.8, 14.6], back: [-6.8, -8.2, -7, -8, -9.6],
+    waist: [-4.6, -5.2, -5.4, -6.4, -8], glute: [-9.4, -11.2, -10.4, -12, -14],
+    quad: [6.2, 7.8, 6.6, 8, 9.8], ham: [-5.4, -6.8, -6.2, -7.6, -9.4], calf: [-4.2, -5.2, -4.4, -5, -6],
+    delt: [3.3, 4.4, 3.4, 3.9, 4.7], bicep: [2.5, 3.4, 2.6, 3, 3.7], fore: [1.8, 2.3, 1.9, 2.3, 2.7],
+    def: [0.9, 0.95, 0.45, 0.15, 0],
   },
 };
 
-// Outline of a limb around its axis: [x, y, halfWidth] stations, returns a closed smooth path
-function limb(axis) {
-  const L = [], R = [];
-  for (let k = 0; k < axis.length; k++) {
-    const [x, y, w] = axis[k];
-    const [nx0, ny0] = axis[Math.max(0, k - 1)], [nx1, ny1] = axis[Math.min(axis.length - 1, k + 1)];
-    let dx = nx1 - nx0, dy = ny1 - ny0; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
-    L.push([x - dy * w * -1, y + dx * w * -1]); R.push([x + dy * w * -1, y - dx * w * -1]);
-  }
-  return spline([...L, ...R.reverse()], true);
-}
-
-// Front-view silhouette for a body shape level (1 = very lean … 5 = heavy)
 function silhouetteSVG(sex, level) {
-  const s = SHAPES[sex], i = level - 1, g = (k) => s[k][i];
-  const cx = 50;
-  const sh = g("shoulder"), ch = g("chest"), wa = g("waist"), be = g("belly"), hi = g("hip");
-  const th = g("thigh"), ca = g("calf"), ar = g("arm"), ne = g("neck");
-  // Torso (shoulders to hips), mirrored
-  const half = [
-    [ne * 0.9, 13], [ne, 18.5], [ne + 1.2, 21.6], [ne + 4, 23.2], [sh - 1.6, 25], [sh, 28.5],
-    [ch, 35], [(ch + wa) / 2 + 0.6, 43], [wa, 50], [be, 57.5], [hi, 65.5], [hi - 0.3, 72], [hi * 0.62, 77.5],
-  ];
-  const torso = spline([...half.map(([x, y]) => [cx + x, y]), [cx, 78.5], ...half.slice().reverse().map(([x, y]) => [cx - x, y])], true);
-  // Legs: built from the inner edge (gap between the legs) and the half-width at each height
-  const thigh = Math.min(th, (hi - 0.4) / 2);
-  const calf = Math.min(ca, thigh * 0.58);
-  const leg = (side) => limb([
-    [0.4, 70, (hi - 0.4) / 2], [0.7, 79, thigh * 0.93], [1.1, 86, (thigh * 0.93 + calf * 0.9) / 2], [1.4, 92.5, calf * 0.88], [1.6, 100.5, calf],
-    [2.9, 113.5, calf * 0.52], [3.1, 118.5, calf * 0.58],
-  ].map(([inner, y, hw]) => [cx + side * (inner + hw), y, hw]));
-  // Feet
-  const foot = (side) => `<ellipse cx="${cx + side * 6.2}" cy="120" rx="2.9" ry="1.6"/>`;
-  // Arms hang just outside the widest point of the waist / hips
-  const wide = Math.max(wa, be, hi);
-  const arm = (side) => limb([
-    [cx + side * (sh - ar * 0.85), 29, ar * 0.7], [cx + side * (sh + ar * 0.12), 32, ar * 0.64],
-    [cx + side * (Math.max(sh, wide) + ar * 0.5 + 0.8), 45, ar * 0.48],
-    [cx + side * (wide + ar * 0.4 + 1.6), 58, ar * 0.38], [cx + side * (wide + ar * 0.35 + 1.8), 65, ar * 0.42], [cx + side * (wide + ar * 0.3 + 1.8), 68.5, ar * 0.3],
-  ]);
-  // Fox head, front view: big pointed ears, cheek fluff, snout
-  const X = (dx) => (cx + dx).toFixed(2);
-  const head = `<path d="M${X(0)},17.8 Q${X(-3)},16.2 ${X(-4.6)},13.6 L${X(-8.4)},12.4 Q${X(-7.6)},8.6 ${X(-6.6)},6.4
-    L${X(-8.6)},-3 L${X(-2.6)},3.4 Q${X(0)},2.6 ${X(2.6)},3.4 L${X(8.6)},-3 L${X(6.6)},6.4
-    Q${X(7.6)},8.6 ${X(8.4)},12.4 L${X(4.6)},13.6 Q${X(3)},16.2 ${X(0)},17.8 Z"/>`;
-  const face = `<g class="cut">
-    <path d="M${X(-7.2)},-0.4 L${X(-3.6)},3.6 L${X(-6.2)},5.4 Z"/><path d="M${X(7.2)},-0.4 L${X(3.6)},3.6 L${X(6.2)},5.4 Z"/>
-    <ellipse cx="${X(-2.9)}" cy="9" rx="1.1" ry="1.4"/><ellipse cx="${X(2.9)}" cy="9" rx="1.1" ry="1.4"/>
-    <ellipse cx="${X(0)}" cy="15.6" rx="1.3" ry="0.9"/></g>`;
-  // Female version: a bow on the right ear
-  const bow = sex === "f"
-    ? `<path class="bow" d="M${X(5.2)},2.4 L${X(2.6)},0 L${X(2.4)},4.4 Z M${X(5.2)},2.4 L${X(7.8)},4.2 L${X(7)},-0.2 Z"/><circle class="bow" cx="${X(5.2)}" cy="2.4" r="0.9"/>`
-    : "";
-  // Bushy tail behind the right hip, curling up, with a white tip
-  const tx = cx + wide;
-  const tail = spline([[tx - 4, 72], [tx + 4, 79.5], [tx + 12, 73.5], [tx + 14.6, 60], [tx + 11.2, 46.5], [tx + 8.2, 50.5], [tx + 7.4, 61], [tx + 2.8, 69]], true);
-  const tip = spline([[tx + 11.1, 46.6], [tx + 14.2, 53.5], [tx + 14.3, 58], [tx + 11, 55.6], [tx + 8.5, 50.4]], true);
-  return `<svg viewBox="15 -4 72 127" aria-hidden="true">` +
-    `<path d="${tail}"/><path class="tip" d="${tip}"/>${head}` +
-    `<path d="${torso}"/><path d="${leg(1)}"/><path d="${leg(-1)}"/>${foot(1)}${foot(-1)}<path d="${arm(1)}"/><path d="${arm(-1)}"/>` +
-    `${face}${bow}</svg>`;
+  const p = PROFILE[sex], i = level - 1, g = (k) => p[k][i];
+  const ax = 50, X = (v) => ax + v;
+  const ch = g("chest"), be = g("belly"), bk = g("back"), wb = g("waist"), gl = g("glute");
+  const qu = g("quad"), hm = g("ham"), ca = g("calf"), def = g("def");
+  const f = sex === "f";
+  // Body: down the front, along the sole, up the back
+  const body = spline([
+    [X(3.6), 19], [X(4.8), 23.5], [X(ch * 0.85), 28], [X(ch), 33], [X(ch - (f ? 0.6 : 1.6)), 38.5],
+    [X((ch + be) / 2 - 1.2), 45], [X(be), 54], [X(be * 0.82 + 0.6), 62], [X(qu * 0.85), 69],
+    [X(qu), 78], [X(qu * 0.55 + 1.6), 91], [X(3.3), 99], [X(2.6), 112], [X(3.4), 117.5], [X(9.5), 119.6], [X(9.4), 121.6],
+    [X(-3.4), 121.6], [X(-4), 118.6], [X(-2.5), 111.5], [X(ca), 100], [X(hm * 0.55), 91.5],
+    [X(hm), 81], [X(gl), 70.5], [X(wb * 0.82), 61], [X(wb), 50], [X(bk), 35], [X(bk * 0.72), 26], [X(-4.2), 19],
+  ], true);
+  // Arm hanging along the side, slightly forward
+  const sx = X(ch * 0.12);
+  const d = g("delt"), bi = g("bicep"), fo = g("fore");
+  const arm = spline([
+    [sx - d * 0.3, 24.6], [sx + d * 0.55, 25.4], [sx + d * 0.95, 28.6], [sx + d * 0.78, 32.6], [sx + bi + 0.2, 37],
+    [sx + bi * 0.72, 43.6], [sx + fo * 1.1 + 0.6, 48.6], [sx + fo * 0.7 + 1.7, 59.5], [sx + fo * 0.9 + 2.3, 64.2], [sx + 2.8, 69],
+    [sx + 0.8, 68.6], [sx - fo * 0.45 + 1.3, 63.8], [sx - fo * 0.5 + 0.9, 59], [sx - fo * 0.95, 48.8],
+    [sx - bi * 0.85, 43], [sx - bi * 1.05, 36], [sx - d * 0.85, 29.4], [sx - d * 0.62, 25.8],
+  ], true);
+  // Faceted fox head in profile (low-poly style), with a neck that blends into the torso
+  const pt = ([x, y]) => `${X(x).toFixed(2)},${y}`;
+  const poly = (pts, cls) => `<polygon${cls ? ` class="${cls}"` : ""} points="${pts.map(pt).join(" ")}"/>`;
+  const seg = (pts) => `M${pts.map(pt).join(" L")}`;
+  const head = poly([[-6.4, 9], [-5.2, 4], [-4.2, 3], [-2.2, -7], [2, 2.4], [4.6, 4.2], [8.2, 7.4], [13.4, 11.2],
+    [12.8, 12.8], [7, 14.4], [3.6, 16.6], [4.2, 20.5], [4.6, 24], [-3.8, 24], [-4.4, 19.5], [-6.6, 13.4]]);
+  const face = poly([[9.2, 11.4], [12.8, 12.8], [7, 14.4], [3.6, 16.6], [1, 14.2]], "tip") +
+    `<g class="cut">${poly([[-3.4, 2.4], [-2.2, -4.2], [0.4, 2]])}${poly([[2.6, 6.8], [4.6, 7.4], [3, 8.4]])}` +
+    `<circle cx="${X(13)}" cy="11.9" r="0.9"/></g>` +
+    `<path class="facet" d="${seg([[2, 2.4], [3, 9], [8.2, 7.4]])} ${seg([[3, 9], [9.2, 11.4], [13.4, 11.2]])} ` +
+    `${seg([[3, 9], [1, 14.2], [-6.6, 13.4]])} ${seg([[1, 14.2], [-1.2, 9.4], [-5.2, 4]])} ${seg([[-1.2, 9.4], [3, 9]])} ` +
+    `${seg([[3.6, 16.6], [-1.6, 18.6], [-4.4, 19.5]])}"/>`;
+  const bow = f ? `<path class="bow" d="M${X(-0.6)},1.6 L${X(-3.6)},-1 L${X(-3.4)},3.8 Z M${X(-0.6)},1.6 L${X(2.4)},3.8 L${X(1.6)},-0.6 Z"/><circle class="bow" cx="${X(-0.6)}" cy="1.6" r="0.9"/>` : "";
+  // Bushy tail from the lower back, curling up behind
+  const tx = X(gl + 1.5);
+  const tail = spline([[tx + 3, 63], [tx - 3, 71], [tx - 11, 69.5], [tx - 15, 58], [tx - 12.5, 45], [tx - 9.4, 48.5], [tx - 9.2, 57.5], [tx - 4, 63.5]], true);
+  const tip = spline([[tx - 12.4, 45.1], [tx - 15.2, 52.5], [tx - 14.6, 56.5], [tx - 11.6, 53.6], [tx - 9.5, 48.4]], true);
+  // Muscle definition, stronger when lean: light on the volumes, dark lines between muscles
+  const facet = (cx, cy, rx, ry, rot = 0) => {
+    const r = (rot * Math.PI) / 180, c = Math.cos(r), sn = Math.sin(r);
+    const pts = [[-rx, -ry * 0.2], [rx * 0.15, -ry], [rx, ry * 0.1], [-rx * 0.1, ry]]
+      .map(([x, y]) => `${(cx + x * c - y * sn).toFixed(2)},${(cy + x * sn + y * c).toFixed(2)}`);
+    return `<polygon points="${pts.join(" ")}"/>`;
+  };
+  const hl = def ? `<g class="hl" style="opacity:${(0.4 * def).toFixed(2)}">
+    ${facet(X(ch * 0.6), 32.4, (ch * 0.32), 2.6, -12)}
+    ${facet(X(qu * 0.55), 77, (qu * 0.3), 5.4, -8)}
+    ${facet(X(gl * 0.62), 70, (-gl * 0.26), 3.6)}
+    ${facet(X(ca * 0.55), 100, (-ca * 0.28), 3.6)}
+    ${facet(X(bk * 0.55), 36, (-bk * 0.22), 4.2)}
+  </g>` : "";
+  const abs = f ? "" : [43.2, 47.6, 52, 56.2].map((y, k) =>
+    `M${X(be - 0.6 - k * 0.1)},${y} L${X(be - 2.6)},${y + 0.3}`).join(" ");
+  const lines = def ? `<g class="muscle" style="opacity:${def}">
+    <path d="M${X(ch - 1.2)},38.2 Q${X(ch * 0.55)},40 ${X(ch * 0.12)},37.4"/>
+    ${abs ? `<path d="${abs} M${X(be - 2.6)},42.6 L${X(be - 2.9)},57"/>` : ""}
+    <path d="M${X(ch * 0.5)},41.2 l1.4,0.9 M${X(ch * 0.45)},44.2 l1.3,0.9 M${X(ch * 0.42)},47.2 l1.2,0.8"/>
+    <path d="M${X(qu - 1.6)},71.5 Q${X(qu * 0.6)},79 ${X(qu * 0.42)},87"/>
+    <path d="M${X(qu * 0.65)},84.5 Q${X(qu * 0.9)},88 ${X(qu * 0.55 + 1.3)},91.2"/>
+    <path d="M${X(gl + 2.4)},75.2 Q${X(gl * 0.5)},77.6 ${X(gl * 0.18)},76.6"/>
+    <path d="M${X(hm * 0.65)},80 Q${X(hm * 0.55)},86 ${X(hm * 0.4)},90"/>
+    <path d="M${X(ca + 1.2)},96 Q${X(ca * 0.5)},100 ${X(ca * 0.3)},105"/>
+    <path d="M${X(-2.6)},21.8 Q${X(bk * 0.45)},25.4 ${X(bk * 0.62)},29"/>
+  </g>` : "";
+  const armHl = def ? `<g class="hl" style="opacity:${(0.42 * def).toFixed(2)}">
+    ${facet(sx + d * 0.25, 29, (d * 0.48), 2.8)}
+    ${facet(sx + bi * 0.45, 38, (bi * 0.38), 3)}
+    ${facet(sx + fo * 0.4 + 0.6, 50.5, (fo * 0.4), 3.2)}
+  </g>` : "";
+  const armLines = def ? `<g class="muscle" style="opacity:${def}">
+    <path d="M${sx - d * 0.78},33.2 Q${sx},35.8 ${sx + d * 0.72},32.8"/>
+    <path d="M${sx - d * 0.1},26.2 Q${sx + 0.2},29.6 ${sx - 0.1},33.8"/>
+    <path d="M${sx - 0.1},37 L${sx - 0.5},43"/>
+    <path d="M${sx + fo * 0.2},46 Q${sx + fo * 0.5 + 0.6},51 ${sx + 1.4},57"/>
+  </g>` : "";
+  return `<svg viewBox="17 -8 52 131" aria-hidden="true">` +
+    `<g class="far"><path d="${tail}"/></g><path d="${body}"/><path class="tip" d="${tip}"/>${head}${face}${bow}` +
+    `${hl}${lines}<path class="arm" d="${arm}"/>${armHl}${armLines}</svg>`;
 }
 
 function renderMorpho() {

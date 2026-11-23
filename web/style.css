@@ -406,10 +406,14 @@ body.reviewing .add-text { display: none; }
   display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
   background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 8px 2px 6px; color: var(--muted);
 }
-.morpho-opt svg { width: 100%; max-width: 46px; height: auto; fill: currentColor; }
+.morpho-opt svg { width: 100%; max-width: 52px; height: auto; fill: currentColor; }
 .morpho-opt .cut { fill: var(--bg); opacity: .55; }
 .morpho-opt .tip { fill: var(--text); opacity: .9; }
 .morpho-opt .bow { fill: #f472b6; }
+.morpho-opt .far { opacity: .72; } /* tail, behind the body */
+.morpho-opt .hl { fill: var(--text); }
+.morpho-opt .facet { fill: none; stroke: var(--bg); stroke-width: .45; stroke-linejoin: round; opacity: .8; }
+.morpho-opt .muscle { fill: none; stroke: var(--bg); stroke-width: .9; stroke-linecap: round; }
 .morpho-opt b { font-size: 11px; font-weight: 600; color: var(--text, inherit); text-align: center; line-height: 1.2; }
 .morpho-opt small { font-size: 11px; }
 .morpho-opt[aria-checked="true"] { border-color: var(--accent); color: var(--accent); }
