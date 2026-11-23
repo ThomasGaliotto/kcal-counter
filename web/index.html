@@ -48,6 +48,7 @@
       <label class="switch-row"><span>💪 Protéines</span><input id="feat-protein" type="checkbox" role="switch"></label>
       <label class="switch-row"><span>🎯 Objectif de poids et pesées</span><input id="feat-weight" type="checkbox" role="switch"></label>
     </div>
+    <button id="open-onboard" class="sheet-btn">🦊 Reprendre la configuration</button>
     <button id="change-password" class="sheet-btn">Changer le mot de passe</button>
     <button id="logout" class="sheet-btn danger">Se déconnecter</button>
   </dialog>
@@ -63,6 +64,19 @@
       <p id="ask-error" class="error" hidden></p>
       <button id="ask-submit" type="submit" class="primary wide">Valider</button>
     </form>
+  </dialog>
+
+  <dialog id="onboard" class="onboard">
+    <div class="ob-top">
+      <div class="ob-progress"><div id="ob-bar"></div></div>
+      <button id="ob-skip-all" type="button" class="link-like">Plus tard</button>
+    </div>
+    <div id="ob-body" class="ob-body"></div>
+    <p id="ob-error" class="error" hidden></p>
+    <div class="ob-nav">
+      <button id="ob-back" type="button" class="ob-secondary">Retour</button>
+      <button id="ob-next" type="button" class="primary">Continuer</button>
+    </div>
   </dialog>
 
   <dialog id="invites-dialog" class="sheet settings">

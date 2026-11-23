@@ -42,6 +42,7 @@ USER_COLUMNS = {
     "morphology": "INTEGER",                           # silhouette 1 (very lean) … 5 (heavy)
     "body_fat_pct": "REAL",                            # measured body fat %, preferred over the silhouette
     "calibrate": "INTEGER NOT NULL DEFAULT 1",         # personal correction from weigh-ins
+    "onboarded": "INTEGER NOT NULL DEFAULT 0",         # first-run setup done (or skipped)
     "show_protein": "INTEGER NOT NULL DEFAULT 1",      # features shown (set per account)
     "show_weight": "INTEGER NOT NULL DEFAULT 1",       # weight goal, weigh-ins, chart
     "strava_athlete": "TEXT",
@@ -101,6 +102,8 @@ def db() -> sqlite3.Connection:
     for name, definition in USER_COLUMNS.items():
         if name not in user_cols:
             conn.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
+            if name == "onboarded":  # accounts that existed before the setup screens skip it
+                conn.execute("UPDATE users SET onboarded = 1")
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS energy_cache (

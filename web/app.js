@@ -1782,12 +1782,232 @@ $("weights-add").onclick = () => $("weigh-btn").onclick();
 $("chart-btn").onclick = openWeights;
 $("open-weights").onclick = openWeights;
 
+// ---------- Onboarding: first-run setup, one question per screen ----------
+let ob = null; // answers being collected
+let obStep = 0;
+const OB_LIFE = [
+  ["1.2", "Sédentaire", "Bureau, télétravail, peu de marche"],
+  ["1.375", "Un peu actif", "Debout une partie de la journée : enseignant, vendeur, commercial"],
+  ["1.55", "Actif", "Debout et en mouvement : infirmier, serveur, artisan"],
+  ["1.725", "Très actif", "Métier physique : maçon, déménageur, agriculteur"],
+];
+const obEl = (html) => { const d = document.createElement("div"); d.innerHTML = html; return d; };
+const obChoices = (name, options, current) => `<fieldset class="choices">${options.map(([v, t, sub]) =>
+  `<label><input type="radio" name="${name}" value="${v}"${String(current) === v ? " checked" : ""}>
+   <span><b>${t}</b>${sub ? `<small>${sub}</small>` : ""}</span></label>`).join("")}</fieldset>`;
+const obPick = (name) => ($("ob-body").querySelector(`input[name=${name}]:checked`) || {}).value;
+const obNum = (id) => { const v = $(id)?.value.trim().replace(",", "."); return v ? Number(v) : null; };
+
+const OB_STEPS = [
+  { // 1. Welcome
+    next: "C'est parti",
+    render: () => obEl(`<div class="ob-hero">${silhouetteSVG(ob.sex || "m", 2)}</div>
+      <h2>Bienvenue sur Kcal, ${me.name} !</h2>
+      <p>📸 Prends ton repas en photo, l'IA estime les aliments et les calories.</p>
+      <p>✍️ Ou décris-le en texte : « une pomme et un café ».</p>
+      <p>💧 L'eau et les boissons remplissent ta jauge d'hydratation.</p>
+      <p class="hint">Quelques questions pour calculer tes objectifs : 2 minutes. Tout reste modifiable plus tard.</p>`),
+  },
+  { // 2. Profile
+    render: () => obEl(`<h2>Parle-nous de toi</h2>
+      <p class="hint">Pour calculer ce que ton corps dépense chaque jour.</p>
+      ${obChoices("ob-sex", [["m", "Homme"], ["f", "Femme"]], ob.sex)}
+      <div class="grid2">
+        <label class="field">Année de naissance<input id="ob-birth" type="number" inputmode="numeric" value="${ob.birth_year ?? ""}"></label>
+        <label class="field">Taille<span class="input-unit"><input id="ob-height" type="number" inputmode="decimal" value="${ob.height_cm ?? ""}"> cm</span></label>
+        <label class="field">Poids<span class="input-unit"><input id="ob-weight" type="number" inputmode="decimal" step="0.1" value="${ob.weight_kg ?? ""}"> kg</span></label>
+      </div>`),
+    save() {
+      ob.sex = obPick("ob-sex") || ob.sex;
+      ob.birth_year = obNum("#ob-birth".slice(1)) ?? ob.birth_year;
+      const by = obNum("ob-birth"), h = obNum("ob-height"), w = obNum("ob-weight");
+      if (by != null && (by < 1900 || by > new Date().getFullYear() - 10)) return "Année de naissance invalide.";
+      if (h != null && (h < 50 || h > 260)) return "Taille entre 50 et 260 cm.";
+      if (w != null && (w < 20 || w > 400)) return "Poids entre 20 et 400 kg.";
+      Object.assign(ob, { birth_year: by, height_cm: h, weight_kg: w });
+    },
+  },
+  { // 3. Body shape
+    render() {
+      const sex = ob.sex || "m";
+      const d = obEl(`<h2>Ta morphologie</h2>
+        <p class="hint">Choisis le renard qui te ressemble le plus : il estime ton % de graisse, et donc ta masse musculaire.</p>
+        <div class="morpho" id="ob-morpho"></div>
+        <label class="field">Ou ton % de graisse mesuré (balance, mesure)
+          <span class="input-unit"><input id="ob-fat" type="number" inputmode="decimal" step="0.5" placeholder="—" value="${ob.body_fat_pct || ""}"> %</span></label>`);
+      const box = d.querySelector("#ob-morpho");
+      MORPHOLOGY[sex].fat.forEach((fat, i) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "morpho-opt"; b.setAttribute("role", "radio");
+        b.setAttribute("aria-checked", String(ob.morphology === i + 1));
+        b.innerHTML = `${silhouetteSVG(sex, i + 1)}<b></b><small>~${fat} %</small>`;
+        b.querySelector("b").textContent = MORPHOLOGY[sex].label[i];
+        b.onclick = () => {
+          ob.morphology = ob.morphology === i + 1 ? 0 : i + 1;
+          box.querySelectorAll(".morpho-opt").forEach((o, k) => o.setAttribute("aria-checked", String(ob.morphology === k + 1)));
+        };
+        box.append(b);
+      });
+      return d;
+    },
+    save() {
+      const fat = obNum("ob-fat");
+      if (fat != null && (fat < 3 || fat > 70)) return "Le % de graisse doit être entre 3 et 70.";
+      ob.body_fat_pct = fat || 0;
+    },
+  },
+  { // 4. Daily activity
+    render: () => obEl(`<h2>Ton quotidien</h2>
+      <p class="hint">Hors sport : ton métier et tes déplacements.</p>${obChoices("ob-life", OB_LIFE, ob.life_factor)}`),
+    save() { ob.life_factor = Number(obPick("ob-life") || ob.life_factor || 1.2); },
+  },
+  { // 5. Expenditure source
+    render: () => obEl(`<h2>Ton sport</h2>
+      <p class="hint">Kcal peut ajouter les calories de tes activités à ton objectif du jour.</p>
+      ${obChoices("ob-src", [
+        ["strava", "Strava", "Tes activités enregistrées sur Strava s'ajoutent (connexion à la fin)"],
+        ["garmin", "Montre Garmin", "Ta dépense mesurée par la montre (connexion à la fin)"],
+        ["none", "Rien pour l'instant", "Un objectif calculé d'après ton profil"],
+      ], ob.energy_source)}`),
+    save() { ob.energy_source = obPick("ob-src") || ob.energy_source || "none"; },
+  },
+  { // 6. Goal
+    render() {
+      const d = obEl(`<h2>Ton objectif</h2>
+        ${obChoices("ob-goal", [["lose", "📉 Perdre du poids"], ["maintain", "⚖️ Garder mon poids"], ["gain", "💪 Prendre du muscle"], ["", "Pas d'objectif pour l'instant"]], ob.goal ?? "")}
+        <div id="ob-goal-more" class="grid2">
+          <label class="field">Poids visé<span class="input-unit"><input id="ob-target" type="number" inputmode="decimal" step="0.1" value="${ob.target_weight ?? ""}"> kg</span></label>
+          <label class="field">D'ici le<input id="ob-date" type="date" value="${ob.target_date ?? ""}"></label>
+        </div>
+        <p class="hint">Kcal en déduit le bilan calorique et les protéines de chaque jour, et les ajuste à chaque pesée.</p>`);
+      const sync = () => { d.querySelector("#ob-goal-more").hidden = !["lose", "gain"].includes(obPick("ob-goal")); };
+      d.addEventListener("change", sync);
+      setTimeout(sync);
+      return d;
+    },
+    save() {
+      ob.goal = obPick("ob-goal") ?? "";
+      ob.target_weight = obNum("ob-target");
+      ob.target_date = $("ob-date")?.value || null;
+      if (ob.goal && !ob.weight_kg) return "Indique ton poids (étape « Parle-nous de toi ») pour définir un objectif.";
+      if (ob.goal === "lose" && ob.target_weight && ob.target_weight >= ob.weight_kg) return "Le poids visé doit être inférieur à ton poids actuel.";
+    },
+  },
+  { // 7. Features, then save everything
+    next: "Terminer",
+    render: () => obEl(`<h2>Ce que tu veux suivre</h2>
+      <div class="features">
+        <label class="switch-row"><span>💪 Protéines</span><input id="ob-prot" type="checkbox" role="switch"${ob.show_protein ? " checked" : ""}></label>
+        <label class="switch-row"><span>🎯 Objectif de poids et pesées</span><input id="ob-weightfeat" type="checkbox" role="switch"${ob.show_weight ? " checked" : ""}></label>
+      </div>
+      <p class="hint">Modifiable à tout moment dans le menu du compte.</p>`),
+    async save() {
+      ob.show_protein = $("ob-prot").checked;
+      ob.show_weight = $("ob-weightfeat").checked;
+      return finishOnboarding();
+    },
+  },
+  { // 8. Summary
+    next: "Commencer",
+    back: false,
+    render() {
+      const d = obEl(`<div class="ob-hero">${silhouetteSVG(ob.sex || "m", ob.morphology || 2)}</div><h2>Tout est prêt !</h2><div id="ob-recap" class="ob-recap">Calcul…</div>`);
+      Promise.all([api("/api/metabolism").catch(() => null)]).then(([m]) => {
+        const lines = [];
+        if (plan?.kcal_goal || me.energy_source === "none") lines.push(["🔥 Calories", `${fmt(plan?.kcal_goal || me.kcal_goal)} kcal / jour`]);
+        else lines.push(["🔥 Calories", "ta dépense du jour " + signed(me.balance_goal) + " kcal"]);
+        if (me.show_protein) lines.push(["💪 Protéines", `${fmt(me.protein_goal || 100)} g / jour`]);
+        lines.push(["💧 Eau", `${fmt(me.water_goal)} ml / jour`]);
+        if (m?.bmr) lines.push(["⚙️ Métabolisme de base", `${fmt(m.bmr)} kcal`]);
+        const box = d.querySelector("#ob-recap");
+        box.innerHTML = "";
+        for (const [k, v] of lines) box.append(obEl(`<span></span><b></b>`)), box.lastChild.firstChild.textContent = k, box.lastChild.lastChild.textContent = v;
+        box.append(obEl(`<p class="hint">Astuce : note tes repas et pèse-toi environ une fois par semaine. Après 3 semaines, Kcal calibre tes objectifs sur tes vrais résultats.</p>`));
+        if (me.energy_source !== "none" && !(me.strava_connected || me.garmin_connected)) {
+          box.append(obEl(`<p class="hint">Il reste à connecter ${me.energy_source === "strava" ? "Strava" : "ta montre Garmin"} : on t'y emmène en touchant « Commencer ».</p>`));
+        }
+      });
+      return d;
+    },
+    async save() {
+      $("onboard").close();
+      if (me.energy_source === "strava" && !me.strava_connected) return void (location.href = "/api/strava/connect");
+      if (me.energy_source === "garmin" && !me.garmin_connected) openSettings();
+    },
+  },
+];
+
+async function finishOnboarding(skipped = false) {
+  const body = { onboarded: true };
+  if (!skipped) {
+    for (const k of ["sex", "birth_year", "height_cm", "weight_kg", "life_factor", "energy_source", "show_protein", "show_weight"]) {
+      if (ob[k] != null && ob[k] !== "") body[k] = ob[k];
+    }
+    body.morphology = ob.morphology || 0;
+    body.body_fat_pct = ob.body_fat_pct || 0;
+  }
+  me = await api("/api/me", jsonPatch(body));
+  if (!skipped && ob.goal) {
+    await api("/api/goal", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      type: ob.goal, current_weight: ob.weight_kg,
+      target_weight: ob.goal === "maintain" ? null : ob.target_weight, target_date: ob.goal === "maintain" ? null : ob.target_date,
+    }) });
+  }
+  try { await refreshGoal(); } catch {}
+  me = await api("/api/me");
+  applyFeatures();
+  loadDay();
+}
+
+function renderOnboardStep() {
+  const step = OB_STEPS[obStep];
+  $("ob-bar").style.width = `${((obStep + 1) / OB_STEPS.length) * 100}%`;
+  $("ob-error").hidden = true;
+  $("ob-body").replaceChildren(step.render());
+  $("ob-body").scrollTop = 0;
+  $("ob-back").hidden = obStep === 0 || step.back === false;
+  $("ob-skip-all").hidden = obStep === OB_STEPS.length - 1;
+  $("ob-next").textContent = step.next || "Continuer";
+}
+
+function openOnboarding() {
+  if ($("account").open) $("account").close();
+  ob = {
+    sex: me.sex, birth_year: me.birth_year, height_cm: me.height_cm, weight_kg: me.weight_kg,
+    morphology: me.morphology || 0, body_fat_pct: me.body_fat_pct, life_factor: me.life_factor ?? 1.2,
+    energy_source: me.energy_source, goal: plan?.type ?? "", target_weight: plan?.target_weight, target_date: plan?.target_date,
+    show_protein: me.show_protein, show_weight: me.show_weight,
+  };
+  obStep = 0;
+  renderOnboardStep();
+  $("onboard").showModal();
+}
+
+$("ob-next").onclick = async () => {
+  $("ob-next").disabled = true;
+  try {
+    const err = await OB_STEPS[obStep].save?.();
+    if (err) { $("ob-error").textContent = err; $("ob-error").hidden = false; return; }
+    if (obStep < OB_STEPS.length - 1) { obStep++; renderOnboardStep(); }
+  } catch (e) {
+    $("ob-error").textContent = e.message; $("ob-error").hidden = false;
+  } finally { $("ob-next").disabled = false; }
+};
+$("ob-back").onclick = () => { OB_STEPS[obStep].save?.(); obStep = Math.max(0, obStep - 1); renderOnboardStep(); };
+$("ob-skip-all").onclick = async () => {
+  $("onboard").close();
+  if (!me.onboarded) await finishOnboarding(true).catch(() => {});
+};
+$("onboard").addEventListener("cancel", (e) => e.preventDefault()); // Escape doesn't dismiss half-way
+$("open-onboard").onclick = openOnboarding;
+
 async function startApp() {
   handleOAuthReturn();
   $("account-btn").textContent = (me.name || "?").trim().charAt(0).toUpperCase();
   day = todayISO();
   try { await refreshGoal(); } catch {} // no goal or offline: carry on
   applyFeatures();
+  if (!me.onboarded) openOnboarding();
   loadDay().catch(showError);
 }
 function showError(err) {

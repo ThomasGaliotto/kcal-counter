@@ -23,6 +23,13 @@ The small **i** buttons on the cards explain how each number is computed.
 
 > The app's interface is in French.
 
+## First-run setup
+
+Right after sign-up, a few full-screen steps guide the new user: profile (sex, birth year, height, weight),
+body shape (silhouette or measured body fat %), daily activity, Strava/Garmin, goal and tracked features,
+then a summary of the daily calories, protein and water. Every step can be skipped ("Plus tard"), and
+account menu → **🦊 Reprendre la configuration** opens it again. Accounts created before this feature skip it.
+
 ## Adding meals
 
 - **Photo**: take or pick a picture; the model lists each food with grams, kcal/100 g and protein/100 g.

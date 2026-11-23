@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
-    "protein_mode", "protein_value", "show_protein", "show_weight", "morphology", "body_fat_pct", "calibrate",
+    "protein_mode", "protein_value", "show_protein", "show_weight", "morphology", "body_fat_pct", "calibrate", "onboarded",
 )
 
 
@@ -61,6 +61,7 @@ def _public(user) -> dict:
     data = {k: user[k] for k in PUBLIC_FIELDS}
     data["show_protein"], data["show_weight"] = bool(user["show_protein"]), bool(user["show_weight"])
     data["calibrate"] = bool(user["calibrate"])
+    data["onboarded"] = bool(user["onboarded"])
     data["is_admin"] = is_admin(user)
     data["strava_connected"] = bool(user["strava_refresh"])
     data["strava_available"] = bool(os.environ.get("STRAVA_CLIENT_ID"))
@@ -128,6 +129,7 @@ class Profile(BaseModel):
     morphology: int | None = Field(None, ge=0, le=5)  # 0 = clear
     body_fat_pct: float | None = Field(None, ge=0, le=70)  # 0 = clear
     calibrate: bool | None = None
+    onboarded: bool | None = None
 
 
 class PasswordChange(BaseModel):
