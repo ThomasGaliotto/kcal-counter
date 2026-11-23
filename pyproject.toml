@@ -2,6 +2,7 @@
 name = "kcal-counter"
 version = "0.1.0"
 description = "Compteur de calories par photo, branché sur Ollama en local"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

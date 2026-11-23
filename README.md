@@ -177,3 +177,7 @@ Then in Safari: **Share → Add to Home Screen**. The app opens full screen like
 - Tap the goal ("/ 2000 kcal") or the water gauge to change them.
 - No "forgot password" yet: it would require sending e-mails.
 - No Google sign-in: it requires a domain name over HTTPS. It could later hook into these accounts via the e-mail address.
+
+## License
+
+[MIT](LICENSE) © 2026 Thomas Galiotto
