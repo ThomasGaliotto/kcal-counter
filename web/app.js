@@ -935,34 +935,95 @@ const MORPHOLOGY = {
 let morphoLevel = 0; // 0 = not chosen
 let metabolismInfo = null; // last /api/metabolism answer (calibration details)
 
-// Front-view silhouette drawn from a few widths: shoulders, chest, waist, hips, limbs.
-function silhouetteSVG(sex, level) {
-  const i = level - 1;
-  const P = sex === "f"
-    ? { S: [12, 12.5, 13, 14.5, 16.5], C: [11, 12, 12.5, 14.5, 17], W: [8, 9, 10.5, 13.5, 16.5], H: [12.5, 13.5, 14.5, 17, 19.5], A: [3.4, 4, 4.4, 5.2, 6.2], L: [6.5, 7.5, 8.2, 9.6, 11.5] }
-    : { S: [14, 16.5, 15.5, 16.5, 18], C: [12.5, 15, 14, 16, 18.5], W: [9.5, 11, 12.5, 15.5, 18.5], H: [11, 12, 12.8, 15, 17.5], A: [3.8, 5.2, 4.8, 5.6, 6.6], L: [6.5, 8.2, 8, 9.4, 11] };
-  const [S, C, W, H, A, L] = ["S", "C", "W", "H", "A", "L"].map((k) => P[k][i]);
-  const pts = [[3.5, 21], [S, 27], [C, 40], [W, 56], [H, 70]];
-  const right = pts.map(([x, y]) => [30 + x, y]), left = pts.map(([x, y]) => [30 - x, y]).reverse();
-  const ring = [...right, ...left];
-  let d = `M${ring[0][0]},${ring[0][1]}`;
-  for (let k = 1; k < ring.length; k++) { // smooth curve through midpoints
-    const [x, y] = ring[k], [px, py] = ring[k - 1];
-    d += ` Q${px},${py} ${(px + x) / 2},${(py + y) / 2}`;
+// Smooth path through points (Catmull-Rom -> cubic Bézier), for the silhouettes
+function spline(pts, closed) {
+  const n = pts.length, P = (i) => pts[closed ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+  let d = `M${P(0)[0].toFixed(2)},${P(0)[1].toFixed(2)}`;
+  const last = closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2), t = 6;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / t, p1[1] + (p2[1] - p0[1]) / t];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / t, p2[1] - (p3[1] - p1[1]) / t];
+    d += ` C${c1.map((v) => v.toFixed(2))} ${c2.map((v) => v.toFixed(2))} ${p2.map((v) => v.toFixed(2))}`;
   }
-  d += ` L${ring[ring.length - 1][0]},${ring[ring.length - 1][1]} Z`;
-  const legX = H - L / 2 - 0.3;
-  const armEnd = Math.max(W, H) + A / 2 + 1.2; // arms hang just outside the waist and hips
-  return `<svg viewBox="0 0 60 122" aria-hidden="true">
-    <circle cx="30" cy="11" r="7"/>
-    <path d="${d}"/>
-    <g stroke="currentColor" stroke-linecap="round" fill="none">
-      <line x1="${30 - S + A / 2}" y1="30" x2="${30 - armEnd}" y2="66" stroke-width="${A}"/>
-      <line x1="${30 + S - A / 2}" y1="30" x2="${30 + armEnd}" y2="66" stroke-width="${A}"/>
-      <line x1="${30 - legX}" y1="72" x2="${30 - 4.5}" y2="116" stroke-width="${L}"/>
-      <line x1="${30 + legX}" y1="72" x2="${30 + 4.5}" y2="116" stroke-width="${L}"/>
-    </g>
-  </svg>`;
+  return d + (closed ? " Z" : "");
+}
+
+// Body widths (half-widths from the centre line x = 50) per level 1 (very lean) … 5 (heavy)
+const SHAPES = {
+  m: {
+    shoulder: [15.5, 18.5, 17, 18, 19.5], chest: [12.5, 15.5, 14.5, 16.5, 19],
+    waist: [10, 11.5, 12.5, 16, 20], belly: [10, 11.5, 13, 17.5, 22], hip: [11.5, 12.5, 13.2, 15.5, 18.5],
+    thigh: [6.2, 7.6, 7.6, 9, 10.6], calf: [4.4, 5.4, 5.2, 6, 7], arm: [3.4, 4.6, 4.2, 5, 6], neck: [3.6, 4.4, 4.1, 4.5, 5.2],
+  },
+  f: {
+    shoulder: [13.5, 14.5, 14.5, 15.5, 17], chest: [12, 13, 13.5, 15.5, 18],
+    waist: [8.6, 9.6, 10.8, 13.8, 17], belly: [9.5, 10.5, 12, 15.5, 19], hip: [13.5, 14.5, 15.8, 18, 21],
+    thigh: [6.4, 7.4, 8, 9.4, 11.2], calf: [4.2, 4.9, 5.1, 5.9, 6.9], arm: [3, 3.6, 3.7, 4.4, 5.4], neck: [3.2, 3.5, 3.5, 3.9, 4.5],
+  },
+};
+
+// Outline of a limb around its axis: [x, y, halfWidth] stations, returns a closed smooth path
+function limb(axis) {
+  const L = [], R = [];
+  for (let k = 0; k < axis.length; k++) {
+    const [x, y, w] = axis[k];
+    const [nx0, ny0] = axis[Math.max(0, k - 1)], [nx1, ny1] = axis[Math.min(axis.length - 1, k + 1)];
+    let dx = nx1 - nx0, dy = ny1 - ny0; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+    L.push([x - dy * w * -1, y + dx * w * -1]); R.push([x + dy * w * -1, y - dx * w * -1]);
+  }
+  return spline([...L, ...R.reverse()], true);
+}
+
+// Front-view silhouette for a body shape level (1 = very lean … 5 = heavy)
+function silhouetteSVG(sex, level) {
+  const s = SHAPES[sex], i = level - 1, g = (k) => s[k][i];
+  const cx = 50;
+  const sh = g("shoulder"), ch = g("chest"), wa = g("waist"), be = g("belly"), hi = g("hip");
+  const th = g("thigh"), ca = g("calf"), ar = g("arm"), ne = g("neck");
+  // Torso (shoulders to hips), mirrored
+  const half = [
+    [ne * 0.9, 13], [ne, 18.5], [ne + 1.2, 21.6], [ne + 4, 23.2], [sh - 1.6, 25], [sh, 28.5],
+    [ch, 35], [(ch + wa) / 2 + 0.6, 43], [wa, 50], [be, 57.5], [hi, 65.5], [hi - 0.3, 72], [hi * 0.62, 77.5],
+  ];
+  const torso = spline([...half.map(([x, y]) => [cx + x, y]), [cx, 78.5], ...half.slice().reverse().map(([x, y]) => [cx - x, y])], true);
+  // Legs: built from the inner edge (gap between the legs) and the half-width at each height
+  const thigh = Math.min(th, (hi - 0.4) / 2);
+  const calf = Math.min(ca, thigh * 0.58);
+  const leg = (side) => limb([
+    [0.4, 70, (hi - 0.4) / 2], [0.7, 79, thigh * 0.93], [1.1, 86, (thigh * 0.93 + calf * 0.9) / 2], [1.4, 92.5, calf * 0.88], [1.6, 100.5, calf],
+    [2.9, 113.5, calf * 0.52], [3.1, 118.5, calf * 0.58],
+  ].map(([inner, y, hw]) => [cx + side * (inner + hw), y, hw]));
+  // Feet
+  const foot = (side) => `<ellipse cx="${cx + side * 6.2}" cy="120" rx="2.9" ry="1.6"/>`;
+  // Arms hang just outside the widest point of the waist / hips
+  const wide = Math.max(wa, be, hi);
+  const arm = (side) => limb([
+    [cx + side * (sh - ar * 0.85), 29, ar * 0.7], [cx + side * (sh + ar * 0.12), 32, ar * 0.64],
+    [cx + side * (Math.max(sh, wide) + ar * 0.5 + 0.8), 45, ar * 0.48],
+    [cx + side * (wide + ar * 0.4 + 1.6), 58, ar * 0.38], [cx + side * (wide + ar * 0.35 + 1.8), 65, ar * 0.42], [cx + side * (wide + ar * 0.3 + 1.8), 68.5, ar * 0.3],
+  ]);
+  // Fox head, front view: big pointed ears, cheek fluff, snout
+  const X = (dx) => (cx + dx).toFixed(2);
+  const head = `<path d="M${X(0)},17.8 Q${X(-3)},16.2 ${X(-4.6)},13.6 L${X(-8.4)},12.4 Q${X(-7.6)},8.6 ${X(-6.6)},6.4
+    L${X(-8.6)},-3 L${X(-2.6)},3.4 Q${X(0)},2.6 ${X(2.6)},3.4 L${X(8.6)},-3 L${X(6.6)},6.4
+    Q${X(7.6)},8.6 ${X(8.4)},12.4 L${X(4.6)},13.6 Q${X(3)},16.2 ${X(0)},17.8 Z"/>`;
+  const face = `<g class="cut">
+    <path d="M${X(-7.2)},-0.4 L${X(-3.6)},3.6 L${X(-6.2)},5.4 Z"/><path d="M${X(7.2)},-0.4 L${X(3.6)},3.6 L${X(6.2)},5.4 Z"/>
+    <ellipse cx="${X(-2.9)}" cy="9" rx="1.1" ry="1.4"/><ellipse cx="${X(2.9)}" cy="9" rx="1.1" ry="1.4"/>
+    <ellipse cx="${X(0)}" cy="15.6" rx="1.3" ry="0.9"/></g>`;
+  // Female version: a bow on the right ear
+  const bow = sex === "f"
+    ? `<path class="bow" d="M${X(5.2)},2.4 L${X(2.6)},0 L${X(2.4)},4.4 Z M${X(5.2)},2.4 L${X(7.8)},4.2 L${X(7)},-0.2 Z"/><circle class="bow" cx="${X(5.2)}" cy="2.4" r="0.9"/>`
+    : "";
+  // Bushy tail behind the right hip, curling up, with a white tip
+  const tx = cx + wide;
+  const tail = spline([[tx - 4, 72], [tx + 4, 79.5], [tx + 12, 73.5], [tx + 14.6, 60], [tx + 11.2, 46.5], [tx + 8.2, 50.5], [tx + 7.4, 61], [tx + 2.8, 69]], true);
+  const tip = spline([[tx + 11.1, 46.6], [tx + 14.2, 53.5], [tx + 14.3, 58], [tx + 11, 55.6], [tx + 8.5, 50.4]], true);
+  return `<svg viewBox="15 -4 72 127" aria-hidden="true">` +
+    `<path d="${tail}"/><path class="tip" d="${tip}"/>${head}` +
+    `<path d="${torso}"/><path d="${leg(1)}"/><path d="${leg(-1)}"/>${foot(1)}${foot(-1)}<path d="${arm(1)}"/><path d="${arm(-1)}"/>` +
+    `${face}${bow}</svg>`;
 }
 
 function renderMorpho() {
