@@ -309,11 +309,11 @@ class GarminCode(BaseModel):
 def _garmin_error(exc: Exception) -> HTTPException:
     name = type(exc).__name__
     if "TooManyRequests" in name:
-        return HTTPException(429, "Garmin bloque temporairement les connexions : réessaie dans quelques minutes")
+        return HTTPException(429, "Garmin bloque temporairement les connexions: réessaie dans quelques minutes")
     if "Authentication" in name:
         # 400, not 401: in the app, 401 means "Kcal session expired" and goes back to the login screen
-        return HTTPException(400, "Garmin a refusé la connexion : vérifie l'e-mail, le mot de passe ou le code")
-    return HTTPException(502, f"Garmin injoignable : {exc}")
+        return HTTPException(400, "Garmin a refusé la connexion: vérifie l'e-mail, le mot de passe ou le code")
+    return HTTPException(502, f"Garmin injoignable: {exc}")
 
 
 def _garmin_save(user_id: int, client) -> None:
@@ -350,7 +350,7 @@ def garmin_mfa(body: GarminCode, user=Depends(current_user)):
 
     pending = _garmin_mfa.pop(user["id"], None)
     if not pending or pending[1] < time.time():
-        raise HTTPException(410, "Le délai pour saisir le code est dépassé : recommence la connexion")
+        raise HTTPException(410, "Le délai pour saisir le code est dépassé: recommence la connexion")
     client = Garmin()
     try:
         client.resume_login(pending[0], body.code.strip())
@@ -386,7 +386,7 @@ def energy(day: date | None = None, user=Depends(current_user)):
             data, out["warning"] = _with_cache(user["id"], day, "strava", lambda: _strava_day(user, day))
             out["activities"] = data["activities"]
         except Exception as exc:
-            out["error"] = f"Strava : {exc}"
+            out["error"] = f"Strava: {exc}"
         out["active"] = round(sum(a["kcal"] for a in out["activities"]))
         if out["resting"] is None:
             out["error"] = "Complète ton profil (sexe, année de naissance, taille, poids) dans les réglages"
@@ -400,7 +400,7 @@ def energy(day: date | None = None, user=Depends(current_user)):
             out.update({k: data.get(k) for k in ("activities",)})
             out["resting"], out["active"], out["burned"] = data.get("resting"), data.get("active"), data.get("total")
         except Exception as exc:
-            out["error"] = f"Garmin : {exc}"
+            out["error"] = f"Garmin: {exc}"
 
     for a in out["activities"]:
         a["icon"] = icon_for(a["type"])

@@ -60,7 +60,7 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
         plan["weekly_change_kg"] = round(plan["balance_goal"] * 7 / KCAL_PER_KG, 2)
         return plan
     if days <= 0:
-        plan["message"] = "L'horizon est dépassé : choisis une nouvelle date."
+        plan["message"] = "L'horizon est dépassé: choisis une nouvelle date."
         return plan
 
     needed = delta * KCAL_PER_KG / days  # kcal/day
@@ -77,7 +77,7 @@ def compute_plan(goal_type: str, weight: float | None, target: float | None,
         plan["capped"] = True
         realistic_days = abs(delta) * KCAL_PER_KG / abs(balance)
         plan["eta_date"] = (today + timedelta(days=round(realistic_days))).isoformat()
-        plan["message"] = (f"Horizon trop court pour rester raisonnable : au rythme conseillé, "
+        plan["message"] = (f"Horizon trop court pour rester raisonnable: au rythme conseillé, "
                            f"objectif atteint vers le {(today + timedelta(days=round(realistic_days))).strftime('%d/%m/%Y')}.")
     else:
         plan["eta_date"] = target_date.isoformat()

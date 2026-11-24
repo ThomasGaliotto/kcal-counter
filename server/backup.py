@@ -19,7 +19,7 @@ def main() -> None:
         src.backup(dst)  # safe copy even while the app is writing
     for old in sorted(folder.glob("kcal-*.db"))[:-KEEP]:
         old.unlink()
-    print(f"Sauvegarde : {target}")
+    print(f"Sauvegarde: {target}")
 
 
 if __name__ == "__main__":

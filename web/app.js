@@ -276,15 +276,15 @@ const INFO = {
       return ["Objectif = dépense prévue à minuit + bilan visé",
         `= ${fmt(Math.round(model.projected))} ${signed(me.balance_goal)} = ${fmt(kcal_goal)} kcal.`,
         "",
-        "Il bouge pendant la journée : chaque activité enregistrée augmente la dépense prévue, donc ce que tu peux manger.",
-        me.balance_goal < 0 ? "Bilan visé négatif : tu manges moins que tu ne dépenses, c'est ce qui fait perdre du poids." : ""].join("\n");
+        "Il bouge pendant la journée: chaque activité enregistrée augmente la dépense prévue, donc ce que tu peux manger.",
+        me.balance_goal < 0 ? "Bilan visé négatif: tu manges moins que tu ne dépenses, c'est ce qui fait perdre du poids." : ""].join("\n");
     }
     if (plan) {
-      return [`Calculé à partir de ton objectif « ${plan.label} » :`,
+      return [`Calculé à partir de ton objectif « ${plan.label} »:`,
         `dépense hors sport + bilan visé (${signed(plan.balance_goal)} kcal) = ${fmt(kcal_goal)} kcal.`,
         "", metabolismText()].join("\n");
     }
-    return [`Ton objectif est fixe : ${fmt(kcal_goal)} kcal par jour. Touche « sur … visés » pour le changer.`,
+    return [`Ton objectif est fixe: ${fmt(kcal_goal)} kcal par jour. Touche « sur … visés » pour le changer.`,
       "", "Pour un objectif qui suit ta dépense réelle, branche Strava ou Garmin (menu du compte → Dépense énergétique)."].join("\n");
   },
   burned() {
@@ -292,43 +292,43 @@ const INFO = {
     if (!m) return "La dépense du jour n'est pas disponible pour l'instant (Strava ou Garmin injoignable).";
     if (me.energy_source === "garmin") {
       return ["Total mesuré par ta montre Garmin jusqu'à maintenant (repos + activité).",
-        "", `Métabolisme : la part « repos » prévue sur la journée, ${fmt(Math.round(m.resting))} kcal. La barre avance avec l'heure.`].join("\n");
+        "", `Métabolisme: la part « repos » prévue sur la journée, ${fmt(Math.round(m.resting))} kcal. La barre avance avec l'heure.`].join("\n");
     }
-    return [`Métabolisme : ce que ton corps dépense au repos et dans la vie quotidienne, ${fmt(Math.round(m.resting))} kcal sur la journée.`,
+    return [`Métabolisme: ce que ton corps dépense au repos et dans la vie quotidienne, ${fmt(Math.round(m.resting))} kcal sur la journée.`,
       "La barre avance avec l'heure.",
       "", metabolismText(),
-      "", "Activités : les calories de tes activités Strava du jour.",
+      "", "Activités: les calories de tes activités Strava du jour.",
       "", "Brûlé = métabolisme écoulé jusqu'à maintenant + activités."].join("\n");
   },
   projection() {
-    return ["Brûlé prévu : ce que tu auras dépensé à minuit si tu ne fais plus de sport.",
-      "Bilan : mangé − brûlé prévu. Négatif = tu manges moins que tu ne dépenses.",
-      `Encore possible : ce que tu peux encore manger en tenant ton bilan visé (${signed(me.balance_goal)} kcal).`].join("\n");
+    return ["Brûlé prévu: ce que tu auras dépensé à minuit si tu ne fais plus de sport.",
+      "Bilan: mangé − brûlé prévu. Négatif = tu manges moins que tu ne dépenses.",
+      `Encore possible: ce que tu peux encore manger en tenant ton bilan visé (${signed(me.balance_goal)} kcal).`].join("\n");
   },
   protein() {
     const w = plan?.current_weight || me.weight_kg;
     const mode = me.protein_mode || "auto";
-    const how = mode === "grams" ? `Objectif réglé à la main : ${fmt(facts.pGoal)} g par jour.`
+    const how = mode === "grams" ? `Objectif réglé à la main: ${fmt(facts.pGoal)} g par jour.`
       : mode === "per_kg" ? `${fmtNum(me.protein_value)} g par kg × ${fmtKg(w)} kg = ${fmt(facts.pGoal)} g, recalculé à chaque pesée.`
-      : plan ? `Selon ton objectif « ${plan.label} » : ${fmtNum(plan.protein_auto_per_kg)} g par kg de poids = ${fmt(facts.pGoal)} g.`
-      : w ? `Par défaut : 1,6 g par kg de poids = ${fmt(facts.pGoal)} g.` : "Par défaut 100 g (renseigne ton poids pour un calcul en g/kg).";
+      : plan ? `Selon ton objectif « ${plan.label} »: ${fmtNum(plan.protein_auto_per_kg)} g par kg de poids = ${fmt(facts.pGoal)} g.`
+      : w ? `Par défaut: 1,6 g par kg de poids = ${fmt(facts.pGoal)} g.` : "Par défaut 100 g (renseigne ton poids pour un calcul en g/kg).";
     return [how, "", "Le total additionne les protéines de chaque aliment (grammes × protéines pour 100 g).",
       "Touche la carte pour changer l'objectif."].join("\n");
   },
   water() {
     const { sportMin, sportWater, alcoholG, alcoholWater } = facts;
-    const target = [`Objectif de base : ${fmt(me.water_goal)} ml (touche la carte pour le changer).`];
+    const target = [`Objectif de base: ${fmt(me.water_goal)} ml (touche la carte pour le changer).`];
     if (sportWater) target.push(`+${fmt(sportWater)} ml pour ${sportMin} min de sport (500 ml par heure).`);
-    if (alcoholWater) target.push(`+${fmt(alcoholWater)} ml pour ${alcoholG} g d'alcool : l'alcool fait uriner davantage (environ 10 ml par gramme), il faut compenser.`);
+    if (alcoholWater) target.push(`+${fmt(alcoholWater)} ml pour ${alcoholG} g d'alcool: l'alcool fait uriner davantage (environ 10 ml par gramme), il faut compenser.`);
     return [...target, "",
-      "Ce qui compte : l'eau et toutes les boissons sans alcool (café, thé, lait, jus, soda…).",
-      "L'alcool ne compte pas, ni l'eau contenue dans les aliments (soupe, fruits) : elle est déjà prévue dans le repère des 2 L, dont environ 20 % vient de la nourriture.",
+      "Ce qui compte: l'eau et toutes les boissons sans alcool (café, thé, lait, jus, soda…).",
+      "L'alcool ne compte pas, ni l'eau contenue dans les aliments (soupe, fruits): elle est déjà prévue dans le repère des 2 L, dont environ 20 % vient de la nourriture.",
     ].join("\n");
   },
   goal() {
-    return ["Bilan visé = (poids actuel − poids visé) × 7 700 kcal ÷ jours restants : 1 kg de masse corporelle ≈ 7 700 kcal.",
+    return ["Bilan visé = (poids actuel − poids visé) × 7 700 kcal ÷ jours restants: 1 kg de masse corporelle ≈ 7 700 kcal.",
       "", "Pour rester raisonnable, le rythme est plafonné à 1 % du poids par semaine et à −1 000 kcal par jour (+500 en prise de muscle).",
-      "", "Protéines : 2 g/kg en perte de poids (pour préserver le muscle), 1,8 g/kg en prise de muscle, 1,6 g/kg en maintien.",
+      "", "Protéines: 2 g/kg en perte de poids (pour préserver le muscle), 1,8 g/kg en prise de muscle, 1,6 g/kg en maintien.",
       "", "Tout est recalculé à chaque pesée."].join("\n");
   },
 };
@@ -337,19 +337,19 @@ function metabolismText() {
   const m = metabolismInfo;
   if (!m || !m.bmr) return "Renseigne ton profil (menu du compte → Dépense énergétique) pour calculer ton métabolisme.";
   const formula = m.formula === "katch"
-    ? `Métabolisme de base : ${fmt(m.bmr)} kcal, d'après ta masse maigre (${fmtNum(m.body_fat_pct)} % de graisse ${m.body_fat_source === "measured" ? "mesuré" : "estimé d'après ta silhouette"}, formule de Katch-McArdle) : le muscle brûle plus que la graisse.`
-    : `Métabolisme de base : ${fmt(m.bmr)} kcal, d'après ton sexe, ton âge, ta taille et ton poids (formule de Mifflin-St Jeor).`;
+    ? `Métabolisme de base: ${fmt(m.bmr)} kcal, d'après ta masse maigre (${fmtNum(m.body_fat_pct)} % de graisse ${m.body_fat_source === "measured" ? "mesuré" : "estimé d'après ta silhouette"}, formule de Katch-McArdle): le muscle brûle plus que la graisse.`
+    : `Métabolisme de base: ${fmt(m.bmr)} kcal, d'après ton sexe, ton âge, ta taille et ton poids (formule de Mifflin-St Jeor).`;
   const c = m.calibration;
   const calib = c.status === "ok" && c.enabled && c.factor !== 1
-    ? ` × ${fmtNum(c.factor)} (calibrage d'après tes pesées : ton corps dépense ${Math.round(Math.abs(c.factor - 1) * 100)} % de ${c.factor > 1 ? "plus" : "moins"} que la formule)`
+    ? ` × ${fmtNum(c.factor)} (calibrage d'après tes pesées: ton corps dépense ${Math.round(Math.abs(c.factor - 1) * 100)} % de ${c.factor > 1 ? "plus" : "moins"} que la formule)`
     : "";
   return [formula, `Dépense hors sport = ${fmt(m.bmr)} × ${fmtNum(m.life_factor)} (vie quotidienne)${calib} = ${fmt(m.daily)} kcal.`].join("\n");
 }
-INFO.carbs = () => [me.carbs_goal ? `Objectif réglé à la main : ${fmt(me.carbs_goal)} g par jour.`
-  : `Objectif auto : ce qui reste de ton objectif de calories (${fmt(facts.kcal_goal)} kcal) une fois les protéines (${fmt(facts.pGoal)} g × 4 kcal) et les lipides (${fmt(facts.mg.fat)} g × 9 kcal) comptés, divisé par 4 kcal par gramme = ${fmt(facts.mg.carbs)} g.`,
+INFO.carbs = () => [me.carbs_goal ? `Objectif réglé à la main: ${fmt(me.carbs_goal)} g par jour.`
+  : `Objectif auto: ce qui reste de ton objectif de calories (${fmt(facts.kcal_goal)} kcal) une fois les protéines (${fmt(facts.pGoal)} g × 4 kcal) et les lipides (${fmt(facts.mg.fat)} g × 9 kcal) comptés, divisé par 4 kcal par gramme = ${fmt(facts.mg.carbs)} g.`,
   "", "Il suit l'objectif de calories du jour. Touche la carte pour fixer un objectif en grammes."].join("\n");
-INFO.fat = () => [me.fat_goal ? `Objectif réglé à la main : ${fmt(me.fat_goal)} g par jour.`
-  : `Objectif auto : ${Math.round(FAT_SHARE * 100)} % de ton objectif de calories (${fmt(facts.kcal_goal)} kcal), à 9 kcal par gramme = ${fmt(facts.mg.fat)} g.`,
+INFO.fat = () => [me.fat_goal ? `Objectif réglé à la main: ${fmt(me.fat_goal)} g par jour.`
+  : `Objectif auto: ${Math.round(FAT_SHARE * 100)} % de ton objectif de calories (${fmt(facts.kcal_goal)} kcal), à 9 kcal par gramme = ${fmt(facts.mg.fat)} g.`,
   "", "Les repères courants vont de 20 à 35 % des calories. Touche la carte pour fixer un objectif en grammes."].join("\n");
 const INFO_TITLES = { eaten: "Objectif de calories", burned: "Dépense du jour", projection: "Projection", protein: "Protéines",
   carbs: "Glucides", fat: "Lipides",
@@ -380,7 +380,7 @@ const askText = (moment = null) => ask({
   title: moment ? `✍️ ${SLOTS.find((s) => s.time === moment.time)?.label || "Repas"} oublié` : "✍️ Ajouter en texte",
   submit: "Analyser",
   fields: [{ key: "text", type: "textarea", label: "Qu'as-tu mangé ou bu ?", voice: true,
-             placeholder: "ex : une pomme, un yaourt et un verre d'eau" }],
+             placeholder: "ex: une pomme, un yaourt et un verre d'eau" }],
   onSubmit: ({ text }) => {
     nextMoment = moment;
     analyze(() => api("/api/analyze-text", {
@@ -397,7 +397,7 @@ let recognition = null;
 function micButton(input) {
   if (!SpeechRec) {
     return Object.assign(document.createElement("p"), {
-      className: "hint", textContent: "Astuce : la touche 🎤 du clavier permet de dicter.",
+      className: "hint", textContent: "Astuce: la touche 🎤 du clavier permet de dicter.",
     });
   }
   const btn = Object.assign(document.createElement("button"), { type: "button", className: "mic-btn", textContent: "🎤 Dicter" });
@@ -416,8 +416,8 @@ function dictate(input, btn) {
   };
   rec.onerror = (e) => showAskError(
     e.error === "no-speech" ? "Je n'ai rien entendu, réessaie."
-    : e.error === "not-allowed" || e.error === "service-not-allowed" ? "Micro refusé : autorise-le, ou utilise la touche 🎤 du clavier."
-    : "Dictée indisponible ici : utilise la touche 🎤 du clavier.");
+    : e.error === "not-allowed" || e.error === "service-not-allowed" ? "Micro refusé: autorise-le, ou utilise la touche 🎤 du clavier."
+    : "Dictée indisponible ici: utilise la touche 🎤 du clavier.");
   rec.onend = () => {
     recognition = null;
     btn.classList.remove("listening");
@@ -449,7 +449,7 @@ $("scan-btn").onclick = async () => {
   scanStatus("Vise le code-barres du produit.");
   $("scan-dialog").showModal();
   if (!navigator.mediaDevices?.getUserMedia) {
-    return scanStatus("Caméra indisponible ici (il faut passer par HTTPS) : tape les chiffres du code.");
+    return scanStatus("Caméra indisponible ici (il faut passer par HTTPS): tape les chiffres du code.");
   }
   try {
     if (!window.ZXing) await loadScript("vendor/zxing.min.js");
@@ -463,8 +463,8 @@ $("scan-btn").onclick = async () => {
     });
   } catch (err) {
     stopScanner();
-    scanStatus(err.name === "NotAllowedError" ? "Caméra refusée : autorise-la dans les réglages, ou tape les chiffres du code."
-               : `Caméra indisponible (${err.message}) : tape les chiffres du code.`);
+    scanStatus(err.name === "NotAllowedError" ? "Caméra refusée: autorise-la dans les réglages, ou tape les chiffres du code."
+               : `Caméra indisponible (${err.message}): tape les chiffres du code.`);
   }
 };
 function stopScanner() {
@@ -518,7 +518,7 @@ async function renderGaps(shownDay) {
     el.querySelector(".usual").onclick = () => openDraft({
       title: m.usual.title, items: m.usual.items.map((it) => ({ ...it })), water_ml: m.usual.water_ml || 0,
       day: g.day, time: m.time, timeTouched: true,
-    }, `≈ Ton ${m.label} habituel : ajuste si tu te souviens de ce que c'était.`);
+    }, `≈ Ton ${m.label} habituel: ajuste si tu te souviens de ce que c'était.`);
     el.querySelector(".describe").onclick = () => askText({ day: g.day, time: m.time });
     el.querySelector(".skip").onclick = async () => {
       await api("/api/gaps/skip", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -529,7 +529,7 @@ async function renderGaps(shownDay) {
   }
   if (y?.missing?.length) {
     const link = Object.assign(document.createElement("button"), { type: "button", className: "gap-link" });
-    link.textContent = `Hier : ${y.missing.map((m) => m.label).join(", ")} non noté${y.missing.length > 1 ? "s" : ""} ›`;
+    link.textContent = `Hier: ${y.missing.map((m) => m.label).join(", ")} non noté${y.missing.length > 1 ? "s" : ""} ›`;
     link.onclick = () => { day = y.day; loadDay(); };
     box.append(link);
   }
@@ -558,7 +558,7 @@ async function celebrateStreak() {
     localStorage.setItem(key, `${todayISO()}:${st.current}`);
   } catch {}
   const record = st.current >= st.best ? " C'est ton record." : "";
-  const next = st.next_milestone ? `\nProchain palier : ${st.next_milestone} jours.` : "";
+  const next = st.next_milestone ? `\nProchain palier: ${st.next_milestone} jours.` : "";
   notice(`${plural(st.current, "jour")} de suite à tout noter, bravo !${record}${next}`, "🔥 Série en cours");
 }
 
@@ -648,7 +648,7 @@ async function renderMonth() {
     const what = !d.logged ? "rien de noté" : `${fmt(d.kcal)} kcal${d.goal ? ` sur ${fmt(d.goal)} visées` : ""}` +
       (state === "ok" ? ", dans l'objectif" : state === "off" ? ", hors objectif"
         : state === "partial" ? `, incomplet (${d.missing.map(slotName).join(", ")} non noté)` : "");
-    b.setAttribute("aria-label", `${longDay(d.day)} : ${what}`);
+    b.setAttribute("aria-label", `${longDay(d.day)}: ${what}`);
     b.title = what;
     b.onclick = () => { day = d.day; setTab("day"); loadDay(); };
     grid.append(b);
@@ -680,11 +680,11 @@ async function renderWeek() {
 
   const st = w.streak;
   $("week-streak").innerHTML = st.current
-    ? `🔥 <b>${plural(st.current, "jour")} de suite</b><small>Record : ${plural(st.best, "jour")}` +
+    ? `🔥 <b>${plural(st.current, "jour")} de suite</b><small>Record: ${plural(st.best, "jour")}` +
       `${st.next_milestone ? ` · prochain palier à ${st.next_milestone}` : ""}` +
       `${st.today_logged ? "" : " · note un repas aujourd'hui pour la prolonger"}</small>`
     : `Pas de série en cours<small>Note tes repas chaque jour pour en lancer une` +
-      `${st.best ? ` (record : ${plural(st.best, "jour")})` : ""}.</small>`;
+      `${st.best ? ` (record: ${plural(st.best, "jour")})` : ""}.</small>`;
 
   drawWeekChart(w);
   const last = [...w.days].reverse().find((d) => d.logged);
@@ -856,7 +856,7 @@ async function analyze(request, { image, text, caption, queue, pending }) {
       if (queue) await queueAdd({ ...queue, eaten_at: moment.timeTouched ? `${moment.day}T${moment.time}:00` : mealTime() });
       closeReview();
       renderPending();
-      return notice(queue ? "Pas de connexion : c'est gardé sur ton téléphone. Tu pourras l'analyser au retour du réseau (bandeau « en attente »)."
+      return notice(queue ? "Pas de connexion: c'est gardé sur ton téléphone. Tu pourras l'analyser au retour du réseau (bandeau « en attente »)."
                           : "Toujours pas de connexion. Réessaie plus tard.", "Hors connexion");
     }
     $("analyzing").hidden = true;
@@ -940,7 +940,7 @@ function renderDraft() {
         showUsual();
       } catch (err) {
         it.estimatedFor = null;
-        $("fix-status").textContent = `Calcul impossible pour « ${n} » : ${err.message}`;
+        $("fix-status").textContent = `Calcul impossible pour « ${n} »: ${err.message}`;
         $("fix-status").hidden = false;
       }
       refresh();
@@ -1054,7 +1054,7 @@ $("save").onclick = async () => {
       if (draft.queued) await queueDel(draft.queued);
       closeReview();
       renderPending();
-      return notice("Pas de connexion : le repas est gardé sur ton téléphone et sera envoyé tout seul au retour du réseau.", "Hors connexion");
+      return notice("Pas de connexion: le repas est gardé sur ton téléphone et sera envoyé tout seul au retour du réseau.", "Hors connexion");
     }
     if (draft.queued) await queueDel(draft.queued);
     const isNew = !draft.id && items.length;
@@ -1239,7 +1239,7 @@ function ask({ title, fields, submit = "Valider", onSubmit, onChange }) {
       if (f.type === "number") {
         const n = Number(raw.replace(",", "."));
         if (raw === "" || !Number.isFinite(n) || (f.min != null && n < f.min) || (f.max != null && n > f.max)) {
-          return showAskError(`${f.label || "Valeur"} : entre ${fmtNum(f.min) ?? "…"} et ${fmtNum(f.max) ?? "…"}${f.unit ? " " + f.unit : ""}.`);
+          return showAskError(`${f.label || "Valeur"}: entre ${fmtNum(f.min) ?? "…"} et ${fmtNum(f.max) ?? "…"}${f.unit ? " " + f.unit : ""}.`);
         }
         values[f.key] = n;
       } else {
@@ -1328,8 +1328,8 @@ for (const k of ["carbs", "fat"]) {
         const mode = ui.mode.get();
         ui.v.label.hidden = mode === "auto";
         ui.note.text.textContent = mode !== "auto" ? "Fixe, quel que soit ton objectif de calories du jour."
-          : k === "fat" ? `${Math.round(FAT_SHARE * 100)} % de tes calories du jour : ${fmt(auto)} g aujourd'hui (1 g = 9 kcal).`
-          : `Le reste de tes calories une fois protéines et lipides comptés : ${fmt(auto)} g aujourd'hui (1 g = 4 kcal).`;
+          : k === "fat" ? `${Math.round(FAT_SHARE * 100)} % de tes calories du jour: ${fmt(auto)} g aujourd'hui (1 g = 9 kcal).`
+          : `Le reste de tes calories une fois protéines et lipides comptés: ${fmt(auto)} g aujourd'hui (1 g = 4 kcal).`;
       },
       onSubmit: async ({ mode, v }) => {
         me = await api("/api/me", jsonPatch({ [`${k}_goal`]: mode === "auto" ? 0 : Math.round(v) }));
@@ -1377,7 +1377,7 @@ $("protein-card").onclick = () => {
       let note = "";
       if (mode === "auto") {
         note = plan
-          ? `Selon ton objectif « ${plan.label} » : ${autoG} g par jour (${fmtNum(autoKg)} g/kg).`
+          ? `Selon ton objectif « ${plan.label} »: ${autoG} g par jour (${fmtNum(autoKg)} g/kg).`
           : weight ? `${autoG} g par jour (1,6 g par kg de poids).` : "100 g par jour (renseigne ton poids pour un calcul en g/kg).";
       } else if (mode === "per_kg") {
         note = weight ? (n > 0 ? `= ${Math.round(n * weight)} g par jour avec ${fmtKg(weight)} kg, recalculé à chaque pesée.` : "")
@@ -1447,7 +1447,7 @@ async function shareInvite(inv) {
   }
   try {
     await navigator.clipboard.writeText(inv.link);
-    notice("Le lien est copié : colle-le dans un message.", "Lien copié");
+    notice("Le lien est copié: colle-le dans un message.", "Lien copié");
   } catch {
     // clipboard unavailable (http, embedded browser): link preselected for copying
     ask({ title: "Copie ce lien", submit: "OK", fields: [{ key: "link", label: "Lien d'invitation", value: inv.link }], onSubmit: () => {} });
@@ -1738,8 +1738,8 @@ function bmrPreview() {
   const c = metabolismInfo?.calibration;
   const factor = $("set-calib").checked && c?.status === "ok" ? c.suggested_factor : 1;
   const daily = bmr * lifeValue() * factor;
-  return `Métabolisme de base : ${fmt(Math.round(bmr))} kcal/jour (${how}).\n` +
-    `Dépense hors sport : ${fmt(Math.round(daily))} kcal/jour` +
+  return `Métabolisme de base: ${fmt(Math.round(bmr))} kcal/jour (${how}).\n` +
+    `Dépense hors sport: ${fmt(Math.round(daily))} kcal/jour` +
     (factor !== 1 ? ` (calibrage ${signed(Math.round((factor - 1) * 100))} % compris)` : "") +
     (sourceValue() === "strava" ? ", + tes activités Strava." : ".");
 }
@@ -1750,13 +1750,13 @@ function calibrationText(c) {
   if (c.status === "ok") {
     const pct = Math.round((c.suggested_factor - 1) * 100);
     const trend = `${c.weekly_change_kg > 0 ? "+" : c.weekly_change_kg < 0 ? "−" : ""}${fmtKg(Math.abs(c.weekly_change_kg))} kg/semaine`;
-    return `Sur 4 semaines : ${fmt(c.mean_intake)} kcal mangées par jour en moyenne et ${trend}. ` +
+    return `Sur 4 semaines: ${fmt(c.mean_intake)} kcal mangées par jour en moyenne et ${trend}. ` +
       `Ta dépense réelle est donc d'environ ${fmt(c.real_expenditure)} kcal/jour, contre ${fmt(c.model_expenditure)} prévues par la formule ` +
       `: ${pct === 0 ? "la formule tombe juste" : `correction de ${signed(pct)} %`}${c.capped ? " (plafonnée à ±20 %)" : ""}.` +
-      (c.enabled ? "" : " Désactivé : la formule seule est utilisée.");
+      (c.enabled ? "" : " Désactivé: la formule seule est utilisée.");
   }
-  return `Il faut 3 semaines de données : au moins ${c.needed_days} jours de repas notés et 3 pesées étalées sur 2 semaines. ` +
-    `Pour l'instant : ${c.days_logged} jours notés, ${c.weighins} pesée${c.weighins > 1 ? "s" : ""}.`;
+  return `Il faut 3 semaines de données: au moins ${c.needed_days} jours de repas notés et 3 pesées étalées sur 2 semaines. ` +
+    `Pour l'instant: ${c.days_logged} jours notés, ${c.weighins} pesée${c.weighins > 1 ? "s" : ""}.`;
 }
 
 function renderSettingsVisibility() {
@@ -1765,16 +1765,16 @@ function renderSettingsVisibility() {
   document.querySelector(".when-profile").hidden = src === "garmin"; // the watch measures it
   $("bmr-preview").textContent = bmrPreview();
   $("life-hint").textContent = src === "strava"
-    ? "Hors sport : tes activités Strava s'ajoutent à part."
+    ? "Hors sport: tes activités Strava s'ajoutent à part."
     : "Si tu fais du sport sans l'enregistrer sur Strava, choisis un niveau au-dessus.";
   $("calib-status").textContent = calibrationText(metabolismInfo?.calibration);
   const warn = $("source-warning");
   warn.hidden = true;
   if (src === "strava" && !me.strava_connected) {
-    warn.textContent = "⚠️ Strava n'est pas connecté : seul ton métabolisme de base sera compté. Touche « Strava » ci-dessus.";
+    warn.textContent = "⚠️ Strava n'est pas connecté: seul ton métabolisme de base sera compté. Touche « Strava » ci-dessus.";
     warn.hidden = false;
   } else if (src === "garmin" && !me.garmin_connected) {
-    warn.textContent = "⚠️ Garmin n'est pas connecté : touche « Garmin » ci-dessus pour le connecter.";
+    warn.textContent = "⚠️ Garmin n'est pas connecté: touche « Garmin » ci-dessus pour le connecter.";
     warn.hidden = false;
   }
 }
@@ -1848,12 +1848,12 @@ function renderStravaPanel(panel) {
   }
   // First time: the administrator registers the Strava application
   panel.innerHTML = `
-    <p>Première fois : il faut déclarer Kcal chez Strava (une seule fois, environ 5 minutes).</p>
+    <p>Première fois: il faut déclarer Kcal chez Strava (une seule fois, environ 5 minutes).</p>
     <ol>
       <li>Ouvre <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>
         et crée une application.</li>
-      <li>Site web : <code>http://localhost</code><br>Domaine de rappel : <code class="cb"></code></li>
-      <li>Ajoute une icône (n'importe quelle image), puis copie ici les deux identifiants affichés :</li>
+      <li>Site web: <code>http://localhost</code><br>Domaine de rappel: <code class="cb"></code></li>
+      <li>Ajoute une icône (n'importe quelle image), puis copie ici les deux identifiants affichés:</li>
     </ol>
     <input class="cid" inputmode="numeric" placeholder="Client ID (un nombre)" autocomplete="off">
     <input class="csecret" placeholder="Client Secret" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -1881,7 +1881,7 @@ function renderStravaPanel(panel) {
 function renderGarminPanel(panel) {
   if (me.garmin_connected) return disconnectPanel(panel, "Garmin", "/api/garmin/disconnect");
   panel.innerHTML = `
-    <p>Connecte-toi avec ton compte Garmin Connect. Le mot de passe sert une seule fois et <b>n'est jamais enregistré</b> :
+    <p>Connecte-toi avec ton compte Garmin Connect. Le mot de passe sert une seule fois et <b>n'est jamais enregistré</b>:
       Kcal ne garde qu'un jeton d'accès, révocable avec « Déconnecter ».</p>
     <input class="gemail" type="email" placeholder="E-mail Garmin" autocomplete="off" autocapitalize="off">
     <input class="gpass" type="password" placeholder="Mot de passe Garmin" autocomplete="off">
@@ -1913,7 +1913,7 @@ function renderGarminPanel(panel) {
           panel.querySelector(".gcode").hidden = false;
           panel.querySelector(".gcode").focus();
           panelError(panel, "");
-          panel.querySelector("p").textContent = "Garmin t'a envoyé un code de vérification : saisis-le ci-dessous.";
+          panel.querySelector("p").textContent = "Garmin t'a envoyé un code de vérification: saisis-le ci-dessous.";
           btn.textContent = "Valider le code";
           return;
         }
@@ -2033,7 +2033,7 @@ function wrongStravaHost() {
   });
   const force = Object.assign(document.createElement("a"), {
     href: "/api/strava/connect?force=1", className: "hint",
-    textContent: "J'ai changé ce domaine chez Strava : essayer quand même",
+    textContent: "J'ai changé ce domaine chez Strava: essayer quand même",
   });
   force.style.display = "block";
   $("ask-fields").append(force);
@@ -2165,7 +2165,7 @@ async function previewGoal() {
     });
     $("goal-error").hidden = true;
     const rate = p.weekly_change_kg ? ` (${p.weekly_change_kg > 0 ? "+" : "−"}${fmtKg(Math.abs(p.weekly_change_kg))} kg/semaine)` : "";
-    box.innerHTML = `Bilan visé : <b></b> par jour<span class="r"></span><br>Protéines : <b></b> par jour (${p.protein_manual ? "réglé à la main" : fmtKg(p.protein_per_kg) + " g/kg"})`;
+    box.innerHTML = `Bilan visé: <b></b> par jour<span class="r"></span><br>Protéines: <b></b> par jour (${p.protein_manual ? "réglé à la main" : fmtKg(p.protein_per_kg) + " g/kg"})`;
     const [bal, prot] = box.querySelectorAll("b");
     bal.textContent = `${signed(p.balance_goal)} kcal`;
     prot.textContent = `${p.protein_goal} g`;
@@ -2300,7 +2300,7 @@ function renderWeightStats() {
   const first = plan?.start_weight ?? weightsCache[0].kg;
   const trend = lastW.trend;
   const cells = [["Départ", `${fmtKg(first)} kg`],
-    ["Tendance", `${fmtKg(trend)} kg`, `pesée : ${fmtKg(lastW.kg)} kg`],
+    ["Tendance", `${fmtKg(trend)} kg`, `pesée: ${fmtKg(lastW.kg)} kg`],
     ["Variation", `${signedKg(trend - first)} kg`, "d'après la tendance"]];
   for (const [label, value, sub] of cells) {
     const d = document.createElement("div");
@@ -2312,7 +2312,7 @@ function renderWeightStats() {
   }
   const lines = [];
   const pace = weeklyPace(weightsCache);
-  if (pace != null) lines.push(`Rythme : ${signedKg(Math.round(pace * 10) / 10)} kg par semaine (4 dernières semaines).`);
+  if (pace != null) lines.push(`Rythme: ${signedKg(Math.round(pace * 10) / 10)} kg par semaine (4 dernières semaines).`);
   const g = goalLine();
   if (g) {
     const expected = goalAt(g, lastW.t);
@@ -2355,7 +2355,7 @@ function drawWeightChart() {
 
   if (!pts.length && !g) {
     svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "empty" }, svg).textContent =
-      weightsCache.length ? "Aucune pesée sur cette période" : "Pas encore de pesée : ajoute la première ci-dessous.";
+      weightsCache.length ? "Aucune pesée sur cette période" : "Pas encore de pesée: ajoute la première ci-dessous.";
     $("chart-key").innerHTML = "";
     return;
   }
@@ -2426,10 +2426,10 @@ function drawWeightChart() {
     tip.innerHTML = "<small></small><b></b>";
     tip.querySelector("small").textContent = new Date(p.t).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
     tip.querySelector("b").textContent = `${fmtKg(p.kg)} kg`;
-    tip.append(Object.assign(document.createElement("small"), { textContent: `tendance : ${fmtKg(p.trend)} kg` }));
+    tip.append(Object.assign(document.createElement("small"), { textContent: `tendance: ${fmtKg(p.trend)} kg` }));
     if (g && p.t >= g.t0) {
       const s = document.createElement("small");
-      s.textContent = `objectif ce jour-là : ${fmtKg(goalAt(g, p.t))} kg`;
+      s.textContent = `objectif ce jour-là: ${fmtKg(goalAt(g, p.t))} kg`;
       tip.append(s);
     }
     tip.hidden = false;
@@ -2482,9 +2482,9 @@ let ob = null; // answers being collected
 let obStep = 0;
 const OB_LIFE = [
   ["1.2", "Sédentaire", "Bureau, télétravail, peu de marche"],
-  ["1.375", "Un peu actif", "Debout une partie de la journée : enseignant, vendeur, commercial"],
-  ["1.55", "Actif", "Debout et en mouvement : infirmier, serveur, artisan"],
-  ["1.725", "Très actif", "Métier physique : maçon, déménageur, agriculteur"],
+  ["1.375", "Un peu actif", "Debout une partie de la journée: enseignant, vendeur, commercial"],
+  ["1.55", "Actif", "Debout et en mouvement: infirmier, serveur, artisan"],
+  ["1.725", "Très actif", "Métier physique: maçon, déménageur, agriculteur"],
 ];
 const obEl = (html) => { const d = document.createElement("div"); d.innerHTML = html; return d; };
 const obChoices = (name, options, current) => `<fieldset class="choices">${options.map(([v, t, sub]) =>
@@ -2499,9 +2499,9 @@ const OB_STEPS = [
     render: () => obEl(`<div class="ob-hero">${silhouetteSVG(ob.sex || "m", 2)}</div>
       <h2>Bienvenue sur Kcal, ${me.name} !</h2>
       <p>📸 Prends ton repas en photo, l'IA estime les aliments et les calories.</p>
-      <p>✍️ Ou décris-le en texte : « une pomme et un café ».</p>
+      <p>✍️ Ou décris-le en texte: « une pomme et un café ».</p>
       <p>💧 L'eau et les boissons remplissent ta jauge d'hydratation.</p>
-      <p class="hint">Quelques questions pour calculer tes objectifs : 2 minutes. Tout reste modifiable plus tard.</p>`),
+      <p class="hint">Quelques questions pour calculer tes objectifs: 2 minutes. Tout reste modifiable plus tard.</p>`),
   },
   { // 2. Profile
     render: () => obEl(`<h2>Parle-nous de toi</h2>
@@ -2526,7 +2526,7 @@ const OB_STEPS = [
     render() {
       const sex = ob.sex || "m";
       const d = obEl(`<h2>Ta morphologie</h2>
-        <p class="hint">Choisis le renard qui te ressemble le plus : il estime ton % de graisse, et donc ta masse musculaire.</p>
+        <p class="hint">Choisis le renard qui te ressemble le plus: il estime ton % de graisse, et donc ta masse musculaire.</p>
         <div class="morpho" id="ob-morpho"></div>
         <label class="field">Ou ton % de graisse mesuré (balance, mesure)
           <span class="input-unit"><input id="ob-fat" type="number" inputmode="decimal" step="0.5" placeholder="—" value="${ob.body_fat_pct || ""}"> %</span></label>`);
@@ -2553,7 +2553,7 @@ const OB_STEPS = [
   },
   { // 4. Daily activity
     render: () => obEl(`<h2>Ton quotidien</h2>
-      <p class="hint">Hors sport : ton métier et tes déplacements.</p>${obChoices("ob-life", OB_LIFE, ob.life_factor)}`),
+      <p class="hint">Hors sport: ton métier et tes déplacements.</p>${obChoices("ob-life", OB_LIFE, ob.life_factor)}`),
     save() { ob.life_factor = Number(obPick("ob-life") || ob.life_factor || 1.2); },
   },
   { // 5. Expenditure source
@@ -2626,9 +2626,9 @@ const OB_STEPS = [
         const box = d.querySelector("#ob-recap");
         box.innerHTML = "";
         for (const [k, v] of lines) box.append(obEl(`<span></span><b></b>`)), box.lastChild.firstChild.textContent = k, box.lastChild.lastChild.textContent = v;
-        box.append(obEl(`<p class="hint">Astuce : note tes repas et pèse-toi environ une fois par semaine. Après 3 semaines, Kcal calibre tes objectifs sur tes vrais résultats.</p>`));
+        box.append(obEl(`<p class="hint">Astuce: note tes repas et pèse-toi environ une fois par semaine. Après 3 semaines, Kcal calibre tes objectifs sur tes vrais résultats.</p>`));
         if (me.energy_source !== "none" && !(me.strava_connected || me.garmin_connected)) {
-          box.append(obEl(`<p class="hint">Il reste à connecter ${me.energy_source === "strava" ? "Strava" : "ta montre Garmin"} : on t'y emmène en touchant « Commencer ».</p>`));
+          box.append(obEl(`<p class="hint">Il reste à connecter ${me.energy_source === "strava" ? "Strava" : "ta montre Garmin"}: on t'y emmène en touchant « Commencer ».</p>`));
         }
       });
       return d;
@@ -2718,7 +2718,7 @@ async function startApp() {
 function showError(err) {
   if (!$("auth").hidden) return; // the login screen is already shown
   $("empty").hidden = false;
-  $("empty").textContent = "Serveur injoignable : " + err.message;
+  $("empty").textContent = "Serveur injoignable: " + err.message;
 }
 
 api("/api/me")

@@ -37,7 +37,7 @@ MAX_SIDE = 1024  # the photo is downscaled: faster, and enough to recognise a di
 # water inside food (soup, fruit) is already part of the ~20 % that comes from food, alcohol dehydrates.
 # The model gives each drink's volume (drink_ml) and alcohol strength (abv); the server adds them up
 # (see ask_model) and raises the day's water target for the alcohol (see list_meals).
-DRINKS_RULE = """EAU ET BOISSONS :
+DRINKS_RULE = """EAU ET BOISSONS:
 - water_ml = eau pure uniquement (plate ou gazeuse), en millilitres. L'eau pure ne va PAS dans items. 0 si pas d'eau.
 - Toute autre boisson va dans items avec ses calories (même ~0 pour un café noir ou un thé).
 - drink_ml (pour chaque élément de items) = son volume en millilitres si c'est une boisson NON alcoolisée
@@ -48,12 +48,12 @@ DRINKS_RULE = """EAU ET BOISSONS :
   (bière ~5, vin ~12, cidre ~5, champagne ~12, spiritueux ~40, cocktail ~15), sinon 0."""
 
 PROMPT = """Tu es un nutritionniste. Analyse la photo de ce repas.
-Liste chaque aliment visible séparément (ex : "riz blanc cuit", "poulet rôti", "sauce tomate").
-Pour chacun, estime :
-- grams : la quantité en grammes, d'après la taille de l'assiette, des couverts et des portions habituelles
-- kcal_100g, protein_100g, carbs_100g, fat_100g : valeurs nutritionnelles pour 100 g de l'aliment TEL QU'IL EST DANS L'ASSIETTE (cuit, avec matière grasse de cuisson si visible).
-  Attention à ne pas utiliser les valeurs à l'état cru ou sec : les féculents cuits absorbent de l'eau.
-  Repères (cuit) : pâtes ~150 kcal, riz ~130, pommes de terre vapeur ~80, frites ~300, pain ~260, œuf au plat ~200, poulet rôti ~190, légumes verts 20-40.
+Liste chaque aliment visible séparément (ex: "riz blanc cuit", "poulet rôti", "sauce tomate").
+Pour chacun, estime:
+- grams: la quantité en grammes, d'après la taille de l'assiette, des couverts et des portions habituelles
+- kcal_100g, protein_100g, carbs_100g, fat_100g: valeurs nutritionnelles pour 100 g de l'aliment TEL QU'IL EST DANS L'ASSIETTE (cuit, avec matière grasse de cuisson si visible).
+  Attention à ne pas utiliser les valeurs à l'état cru ou sec: les féculents cuits absorbent de l'eau.
+  Repères (cuit): pâtes ~150 kcal, riz ~130, pommes de terre vapeur ~80, frites ~300, pain ~260, œuf au plat ~200, poulet rôti ~190, légumes verts 20-40.
 Noms en français, courts et précis. Si la photo ne montre pas de nourriture, renvoie une liste vide.
 Donne aussi un titre court pour le repas.
 
@@ -121,19 +121,19 @@ async def no_stale_files(request, call_next):
 
 
 TEXT_PROMPT = """Tu es un nutritionniste. L'utilisateur décrit en quelques mots ce qu'il a mangé ou bu.
-Transforme sa description en liste d'aliments, un par élément cité (ex : "pomme", "yaourt nature").
-Pour chacun, estime :
-- grams : la quantité indiquée, sinon une portion habituelle (pomme moyenne ~150 g, banane ~120 g, tranche de pain ~35 g,
+Transforme sa description en liste d'aliments, un par élément cité (ex: "pomme", "yaourt nature").
+Pour chacun, estime:
+- grams: la quantité indiquée, sinon une portion habituelle (pomme moyenne ~150 g, banane ~120 g, tranche de pain ~35 g,
   yaourt ~125 g, œuf ~55 g, assiette de pâtes cuites ~250 g, café ~150 g, verre de jus ~200 g). Un nombre (« 2 œufs ») multiplie la portion.
-- kcal_100g, protein_100g, carbs_100g, fat_100g : valeurs pour 100 g de l'aliment tel qu'il est consommé (cuit pour les féculents).
+- kcal_100g, protein_100g, carbs_100g, fat_100g: valeurs pour 100 g de l'aliment tel qu'il est consommé (cuit pour les féculents).
 Noms en français, courts et précis. Si le texte ne parle pas de nourriture ni de boisson, renvoie une liste vide.
 Donne aussi un titre court pour le repas.
 
 """ + DRINKS_RULE + """
-Sans volume précisé : verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
+Sans volume précisé: verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
 canette 330 ml, petite bouteille 500 ml, grande bouteille 1,5 L.
 
-Description de l'utilisateur :
+Description de l'utilisateur:
 """
 
 
@@ -154,7 +154,7 @@ async def _chat(message: dict, schema: dict) -> dict:
             r = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
             r.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(502, f"Ollama injoignable : {exc}") from exc
+        raise HTTPException(502, f"Ollama injoignable: {exc}") from exc
     try:
         return json.loads(r.json()["message"]["content"])
     except (KeyError, json.JSONDecodeError) as exc:
@@ -219,7 +219,7 @@ class MealText(BaseModel):
 @app.post("/api/analyze-text")
 async def analyze_text(body: MealText, user=Depends(current_user)):
     ai_limit.check(f"user:{user['id']}")
-    """Repas décrit en texte (« une pomme et un verre d'eau ») : même format que l'analyse photo."""
+    """Repas décrit en texte (« une pomme et un verre d'eau »): même format que l'analyse photo."""
     text = body.text.strip()
     learn = None if portions.QUANTITY.search(text) else user["id"]  # a quantity typed by the user wins
     return await ask_model({"role": "user", "content": TEXT_PROMPT + text}, learn_for=learn)
@@ -244,27 +244,27 @@ class Meal(BaseModel):
 
 
 FIX_PROMPT = """Tu es un nutritionniste. Voici l'analyse actuelle d'un repas (JSON), puis la correction de l'utilisateur.
-Applique sa correction : remplace, retire ou ajoute les aliments cités, change les quantités s'il en donne.
+Applique sa correction: remplace, retire ou ajoute les aliments cités, change les quantités s'il en donne.
 Garde tels quels les aliments qu'il ne mentionne pas (mêmes noms, grammes et valeurs).
 Pour chaque aliment nouveau ou modifié, recalcule grams (portion habituelle si non précisée, ou la quantité de l'aliment remplacé)
-et les valeurs pour 100 g tel que consommé : kcal_100g, protein_100g, carbs_100g, fat_100g (cuit pour les féculents).
+et les valeurs pour 100 g tel que consommé: kcal_100g, protein_100g, carbs_100g, fat_100g (cuit pour les féculents).
 Mets à jour le titre si le plat a changé.
 """ + DRINKS_RULE.replace("{", "{{").replace("}", "}}") + """
-Sans volume précisé : verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
+Sans volume précisé: verre ~250 ml, grand verre ~330 ml, café ~150 ml, expresso ~40 ml, thé ou mug ~250 ml,
 canette 330 ml, petite bouteille 500 ml, grande bouteille 1,5 L. Si la correction ajoute de l'eau, ajoute-la à water_ml.
 Renvoie l'analyse complète corrigée.
 
-Analyse actuelle :
+Analyse actuelle:
 {current}
 
-Correction de l'utilisateur : {comment}"""
+Correction de l'utilisateur: {comment}"""
 
 ITEM_PROMPT = """Tu es un nutritionniste. Donne les valeurs nutritionnelles de l'aliment « {name} » pour 100 g tel qu'il est consommé
-(cuit pour les féculents et les viandes) : kcal_100g, protein_100g, carbs_100g, fat_100g.
-grams : {grams}
-name : reprends le nom donné, corrigé si besoin (court, en français).
-drink_ml : son volume en millilitres si c'est une boisson non alcoolisée (café, thé, lait, jus, soda…), sinon 0.
-abv : degré d'alcool en % vol. si c'est une boisson alcoolisée (bière ~5, vin ~12, spiritueux ~40), sinon 0."""
+(cuit pour les féculents et les viandes): kcal_100g, protein_100g, carbs_100g, fat_100g.
+grams: {grams}
+name: reprends le nom donné, corrigé si besoin (court, en français).
+drink_ml: son volume en millilitres si c'est une boisson non alcoolisée (café, thé, lait, jus, soda…), sinon 0.
+abv: degré d'alcool en % vol. si c'est une boisson alcoolisée (bière ~5, vin ~12, spiritueux ~40), sinon 0."""
 
 
 class MealFix(BaseModel):
@@ -294,7 +294,7 @@ async def estimate_item(body: ItemQuery, user=Depends(current_user)):
     """Nutrition values of a food added or renamed by hand."""
     ai_limit.check(f"user:{user['id']}")
     grams = (f"garde {round(body.grams)}" if body.grams
-             else "la portion habituelle en grammes (ex : pomme 150, yaourt 125, assiette de pâtes cuites 250)")
+             else "la portion habituelle en grammes (ex: pomme 150, yaourt 125, assiette de pâtes cuites 250)")
     it = _clean_item(await _chat({"role": "user", "content": ITEM_PROMPT.format(name=body.name.strip(), grams=grams)},
                                  ITEM_SCHEMA))
     if body.grams:
@@ -348,7 +348,7 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
 def update_meal(meal_id: int, meal: Meal, user=Depends(current_user)):
     """Edit a saved meal (title, foods, water). Keeps its time unless eaten_at is given."""
     if not meal.items and meal.water_ml <= 0:
-        raise HTTPException(400, "Rien à enregistrer : supprime plutôt le repas")
+        raise HTTPException(400, "Rien à enregistrer: supprime plutôt le repas")
     kcal = sum(i.grams * i.kcal_100g / 100 for i in meal.items)
     with db() as conn:
         row = conn.execute("SELECT eaten_at FROM meals WHERE id = ? AND user_id = ?", (meal_id, user["id"])).fetchone()

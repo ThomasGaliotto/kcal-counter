@@ -85,7 +85,7 @@ def barcode(code: str, user=Depends(current_user)):
     if r.status_code == 404:
         raise HTTPException(404, "Produit inconnu d'Open Food Facts")
     if r.status_code != 200:
-        raise HTTPException(502, f"Open Food Facts : erreur {r.status_code}")
+        raise HTTPException(502, f"Open Food Facts: erreur {r.status_code}")
     data = r.json()
     product = data.get("product") if data.get("status") == 1 else None
     if not product:
