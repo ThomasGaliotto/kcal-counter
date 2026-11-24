@@ -21,8 +21,14 @@ function dayLabel(iso) {
 const kcalOf = (it) => (Number(it.grams) || 0) * (Number(it.kcal_100g) || 0) / 100;
 const macro = (items, key) => Math.round(items.reduce((s, it) => s + it.grams * (it[key] || 0) / 100, 0));
 
+class OfflineError extends Error {}
 async function api(path, opts) {
-  const r = await fetch(path, opts);
+  let r;
+  try {
+    r = await fetch(path, opts);
+  } catch {
+    throw new OfflineError("Pas de connexion au serveur");
+  }
   if (r.status === 401 && !path.startsWith("/api/auth/")) {
     showAuth(); // session expired or never signed in
     throw new Error("Connecte-toi pour continuer");
@@ -33,7 +39,7 @@ async function api(path, opts) {
       const detail = (await r.json()).detail;
       msg = typeof detail === "string" ? detail : detail ? "Une valeur est invalide ou hors limites." : msg;
     } catch {}
-    throw new Error(msg);
+    throw Object.assign(new Error(msg), { status: r.status });
   }
   return r.json();
 }
@@ -49,6 +55,16 @@ async function loadDay() {
     me.energy_source === "none" ? null : api(`/api/energy?day=${day}`).catch((err) => ({ error: err.message, activities: [] })),
   ]);
   if (shownDay !== day) return; // the user switched to another day meanwhile
+  // meals saved offline, not sent yet: shown and counted, marked as pending
+  for (const q of (await queueAll()).filter((q) => q.kind === "meal" && q.body.eaten_at.slice(0, 10) === shownDay)) {
+    const m = { ...q.body, pending: q.id, kcal: q.body.items.reduce((s, it) => s + kcalOf(it), 0) };
+    data.meals.push(m);
+    data.total_kcal += Math.round(m.kcal);
+    data.total_water_ml += m.water_ml || 0;
+    for (const k of ["protein", "carbs", "fat"]) data[`total_${k}_g`] = (data[`total_${k}_g`] || 0) + macro(m.items, `${k}_100g`);
+  }
+  data.meals.sort((a, b) => a.eaten_at.localeCompare(b.eaten_at));
+  if (shownDay !== day) return;
 
   const eaten = data.total_kcal;
   const model = energyModel(energy);
@@ -82,6 +98,15 @@ async function loadDay() {
   $("protein-goal").textContent = fmt(pGoal);
   $("protein-fill").style.width = Math.min(100, ((data.total_protein_g ?? 0) / pGoal) * 100) + "%";
 
+  // ----- Carbs and fat
+  const mg = macroGoals(kcal_goal, pGoal);
+  for (const k of ["carbs", "fat"]) {
+    const total = data[`total_${k}_g`] ?? 0;
+    $(`${k}-total`).textContent = fmt(total);
+    $(`${k}-goal`).textContent = fmt(mg[k]);
+    $(`${k}-fill`).style.width = Math.min(100, mg[k] ? (total / mg[k]) * 100 : 0) + "%";
+  }
+
   // ----- Water
   // Sport: +500 ml per hour of recorded activity (Strava/Garmin), rounded to 50 ml
   const sportMin = (energy?.activities || []).reduce((s, a) => s + (a.minutes || 0), 0);
@@ -97,7 +122,7 @@ async function loadDay() {
   $("water-total").textContent = fmt(data.total_water_ml);
   $("water-fill").style.width = Math.min(100, (data.total_water_ml / waterTarget) * 100) + "%";
 
-  facts = { kcal_goal, model, sportMin, sportWater, alcoholG, alcoholWater, pGoal };
+  facts = { kcal_goal, model, sportMin, sportWater, alcoholG, alcoholWater, pGoal, mg };
 
   // ----- Columns: meals on the left, activities on the right (in expenditure mode)
   const activities = energy ? energy.activities || [] : [];
@@ -138,8 +163,9 @@ async function loadDay() {
   list.innerHTML = "";
   for (const m of data.meals.slice().reverse()) {
     const el = document.createElement("div");
-    el.className = "meal";
-    const time = new Date(m.eaten_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    el.className = m.pending ? "meal pending" : "meal";
+    const time = (m.pending ? "⏳ en attente d'envoi · " : "") +
+      new Date(m.eaten_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
     el.innerHTML = `
       <div class="meal-main">
         <div class="meal-head"><span></span><span>${Math.round(m.kcal)} kcal</span></div>
@@ -166,10 +192,13 @@ async function loadDay() {
       el.querySelector(".meal-macros").remove();
     }
     el.querySelector(".edit").onclick = () => editMeal(m);
+    if (m.pending) el.querySelector(".edit").remove(); // edited once sent
     el.querySelector(".remove").onclick = async () => {
       if (!(await confirmBox(`Supprimer « ${m.title} » ?`, { title: "Supprimer le repas" }))) return;
-      await api(`/api/meals/${m.id}`, { method: "DELETE" });
+      if (m.pending) await queueDel(m.pending);
+      else await api(`/api/meals/${m.id}`, { method: "DELETE" });
       loadDay();
+      renderPending();
     };
     list.appendChild(el);
   }
@@ -315,7 +344,14 @@ function metabolismText() {
     : "";
   return [formula, `Dépense hors sport = ${fmt(m.bmr)} × ${fmtNum(m.life_factor)} (vie quotidienne)${calib} = ${fmt(m.daily)} kcal.`].join("\n");
 }
+INFO.carbs = () => [me.carbs_goal ? `Objectif réglé à la main : ${fmt(me.carbs_goal)} g par jour.`
+  : `Objectif auto : ce qui reste de ton objectif de calories (${fmt(facts.kcal_goal)} kcal) une fois les protéines (${fmt(facts.pGoal)} g × 4 kcal) et les lipides (${fmt(facts.mg.fat)} g × 9 kcal) comptés, divisé par 4 kcal par gramme = ${fmt(facts.mg.carbs)} g.`,
+  "", "Il suit l'objectif de calories du jour. Touche la carte pour fixer un objectif en grammes."].join("\n");
+INFO.fat = () => [me.fat_goal ? `Objectif réglé à la main : ${fmt(me.fat_goal)} g par jour.`
+  : `Objectif auto : ${Math.round(FAT_SHARE * 100)} % de ton objectif de calories (${fmt(facts.kcal_goal)} kcal), à 9 kcal par gramme = ${fmt(facts.mg.fat)} g.`,
+  "", "Les repères courants vont de 20 à 35 % des calories. Touche la carte pour fixer un objectif en grammes."].join("\n");
 const INFO_TITLES = { eaten: "Objectif de calories", burned: "Dépense du jour", projection: "Projection", protein: "Protéines",
+  carbs: "Glucides", fat: "Lipides",
   water: "Eau", goal: "Ton objectif" };
 document.querySelectorAll(".info").forEach((b) => {
   b.onclick = async (e) => {
@@ -334,7 +370,7 @@ async function onPhoto(e) {
   if (!file) return;
   const form = new FormData();
   form.append("photo", file);
-  analyze(() => api("/api/analyze", { method: "POST", body: form }), { image: URL.createObjectURL(file) });
+  analyze(() => api("/api/analyze", { method: "POST", body: form }), { image: URL.createObjectURL(file), queue: { kind: "photo", blob: file } });
 }
 
 // Meal described in text: "an apple and a glass of water"
@@ -346,7 +382,7 @@ $("text-btn").onclick = () => ask({
   onSubmit: ({ text }) => {
     analyze(() => api("/api/analyze-text", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
-    }), { text });
+    }), { text, queue: { kind: "text", text } });
   },
 });
 
@@ -492,8 +528,75 @@ const liters = (ml) => fmt(Math.round(ml / 100) / 10);
 async function openWeek() {
   if ($("account").open) $("account").close();
   weekEnd = todayISO();
+  monthOf = todayISO().slice(0, 7);
+  showView("week");
   $("week-dialog").showModal();
   await renderWeek();
+}
+function showView(view) {
+  for (const v of ["week", "month"]) {
+    $(`${v}-view`).hidden = v !== view;
+    $(`tab-${v}`).classList.toggle("active", v === view);
+    $(`tab-${v}`).setAttribute("aria-selected", v === view);
+  }
+  if (view === "month") renderMonth();
+}
+$("tab-week").onclick = () => showView("week");
+$("tab-month").onclick = () => showView("month");
+
+// ---------- Month calendar ----------
+let monthOf = null; // "YYYY-MM"
+let firstMonth = null;
+function shiftMonth(ym, n) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+$("month-prev").onclick = () => { monthOf = shiftMonth(monthOf, -1); renderMonth(); };
+$("month-next").onclick = () => { monthOf = shiftMonth(monthOf, 1); renderMonth(); };
+
+async function renderMonth() {
+  const ym = monthOf;
+  const [y, m] = ym.split("-").map(Number);
+  $("month-label").textContent = new Date(y, m - 1, 15).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  $("month-next").disabled = ym >= todayISO().slice(0, 7);
+  $("month-prev").disabled = firstMonth != null && ym <= firstMonth;
+  $("month-summary").textContent = "Chargement…";
+  let res;
+  try {
+    res = await api(`/api/month?month=${ym}`);
+  } catch (err) {
+    $("month-summary").textContent = err.message;
+    return;
+  }
+  if (ym !== monthOf) return;
+  firstMonth = res.first_month;
+  $("month-prev").disabled = ym <= firstMonth;
+  const grid = $("month-grid");
+  grid.innerHTML = ["L", "M", "M", "J", "V", "S", "D"].map((d) => `<span class="wd">${d}</span>`).join("");
+  const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday first
+  for (let i = 0; i < offset; i++) grid.append(document.createElement("span"));
+  const today = todayISO();
+  for (const d of res.days) {
+    const b = document.createElement("button");
+    b.type = "button";
+    const n = Number(d.day.slice(8));
+    b.textContent = n;
+    const state = d.on_target === true ? "ok" : d.on_target === false ? "off" : d.logged ? "logged" : "";
+    b.className = `mday ${state}${d.day === today ? " today" : ""}`;
+    b.disabled = d.day > today;
+    const what = !d.logged ? "rien de noté" : `${fmt(d.kcal)} kcal${d.goal ? ` sur ${fmt(d.goal)} visées` : ""}` +
+      (state === "ok" ? ", dans l'objectif" : state === "off" ? ", hors objectif" : "");
+    b.setAttribute("aria-label", `${longDay(d.day)} : ${what}`);
+    b.title = what;
+    b.onclick = () => { $("week-dialog").close(); day = d.day; loadDay(); };
+    grid.append(b);
+  }
+  const verdict = { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[res.direction];
+  $("month-summary").innerHTML = res.logged_days
+    ? `<b>${plural(res.logged_days, "jour")} noté${res.logged_days > 1 ? "s" : ""}</b>` +
+      (res.judged_days ? ` · <b>${res.on_target_days} / ${res.judged_days}</b> dans l'objectif (${verdict})` : "")
+    : "Rien de noté ce mois-ci.";
 }
 $("week-btn").onclick = openWeek;
 $("open-week").onclick = openWeek;
@@ -536,6 +639,8 @@ async function renderWeek() {
        { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[w.direction]);
   if (w.avg_kcal != null && w.prev_avg_kcal != null) tile("vs semaine d'avant", `${signed(w.avg_kcal - w.prev_avg_kcal)} kcal`, "par jour");
   if (me.show_protein && w.avg_protein_g != null) tile("Protéines", `${fmt(w.avg_protein_g)} g`, `/ jour · visé ${fmt(proteinGoal())}`);
+  if (me.show_macros && w.avg_carbs_g != null) tile("Glucides", `${fmt(w.avg_carbs_g)} g`, "par jour");
+  if (me.show_macros && w.avg_fat_g != null) tile("Lipides", `${fmt(w.avg_fat_g)} g`, "par jour");
   if (w.avg_water_ml != null) tile("Eau", `${liters(w.avg_water_ml)} L`, "par jour");
   if (me.show_weight && w.weight) {
     const c = w.weight.change;
@@ -588,6 +693,7 @@ function selectWeekDay(i) {
     : d.on_target === false ? " · hors objectif" : d.day === todayISO() ? " · journée en cours" : "";
   const bits = [`<b>${fmt(d.kcal)} kcal</b>${d.goal ? ` / ${fmt(d.goal)} visés` : ""}${verdict}`];
   if (me.show_protein) bits.push(`${fmt(d.protein_g)} g de protéines`);
+  if (me.show_macros) bits.push(`${fmt(d.carbs_g)} g de glucides · ${fmt(d.fat_g)} g de lipides`);
   if (d.water_ml) bits.push(`💧 ${liters(d.water_ml)} L`);
   $("week-detail").innerHTML = `<b>${name}</b><br>${bits.join(" · ")}`;
 }
@@ -607,7 +713,7 @@ function editMeal(m) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-async function analyze(request, { image, text, caption }) {
+async function analyze(request, { image, text, caption, queue, pending }) {
   draft = null;
   $("review").hidden = false;
   document.body.classList.add("reviewing");
@@ -625,12 +731,21 @@ async function analyze(request, { image, text, caption }) {
   try {
     const res = await request();
     draft = { title: res.title || "Repas", items: res.items || [], water_ml: res.water_ml || 0 };
+    if (pending) Object.assign(draft, { queued: pending.id, eaten_at: pending.eaten_at });
     if (!draft.items.length && !draft.water_ml) {
       throw new Error(text ? "Rien de reconnu. Précise ta description ou ajoute-le à la main."
                            : "Rien de reconnu. Ajoute-le à la main ou reprends la photo.");
     }
     renderDraft();
   } catch (err) {
+    if (err instanceof OfflineError && (queue || pending)) {
+      // no connection: keep the photo / text and analyze it once back online
+      if (queue) await queueAdd({ ...queue, eaten_at: mealTime() });
+      closeReview();
+      renderPending();
+      return notice(queue ? "Pas de connexion : c'est gardé sur ton téléphone. Tu pourras l'analyser au retour du réseau (bandeau « en attente »)."
+                          : "Toujours pas de connexion. Réessaie plus tard.", "Hors connexion");
+    }
     $("analyzing").hidden = true;
     $("error").textContent = err.message;
     $("error").hidden = false;
@@ -654,9 +769,30 @@ function renderDraft() {
   draft.items.forEach((it, idx) => {
     const row = $("item-tpl").content.firstElementChild.cloneNode(true);
     const name = row.querySelector(".name"), grams = row.querySelector(".grams"), k100 = row.querySelector(".k100");
-    const p100 = row.querySelector(".p100");
-    p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
-    p100.oninput = () => (it.protein_100g = Number(p100.value) || 0);
+    const p100 = row.querySelector(".p100"), c100 = row.querySelector(".c100"), f100 = row.querySelector(".f100");
+    const showMacros = () => {
+      for (const [el, key] of [[p100, "protein_100g"], [c100, "carbs_100g"], [f100, "fat_100g"]]) {
+        el.value = Math.round((it[key] || 0) * 10) / 10;
+        el.oninput = () => (it[key] = Number(el.value) || 0);
+      }
+    };
+    showMacros();
+    // portion taken from what the user usually saves for this food: show it, and allow going back
+    const usual = row.querySelector(".usual");
+    const showUsual = () => {
+      usual.hidden = !it.usual;
+      usual.innerHTML = it.usual ? `↺ <b>Ta portion habituelle</b> · l'IA proposait ${fmt(it.ai_grams)} g` : "";
+    };
+    showUsual();
+    usual.onclick = () => {
+      const g = it.ai_grams;
+      if (it.drink_ml) { draft.water_ml = Math.max(0, (draft.water_ml || 0) + g - it.drink_ml); it.drink_ml = g; renderDraftWater(); }
+      it.grams = g;
+      it.usual = false;
+      grams.value = g;
+      showUsual();
+      refresh();
+    };
     name.value = it.name;
     if (it.estimatedFor === undefined) it.estimatedFor = it.name;
     grams.value = Math.round(it.grams);
@@ -676,6 +812,7 @@ function renderDraft() {
         });
         if (it.estimatedFor !== n) return; // renamed meanwhile
         Object.assign(it, { kcal_100g: est.kcal_100g, protein_100g: est.protein_100g, carbs_100g: est.carbs_100g, fat_100g: est.fat_100g, abv: est.abv || 0 });
+        if (it.fresh && est.usual) Object.assign(it, { usual: true, ai_grams: est.ai_grams });
         // a non-alcoholic drink also counts toward hydration
         draft.water_ml = Math.max(0, (draft.water_ml || 0) + (est.drink_ml || 0) - (it.drink_ml || 0));
         it.drink_ml = est.drink_ml || 0;
@@ -685,7 +822,8 @@ function renderDraft() {
         if (!row.isConnected) return renderDraft(); // list redrawn during the estimate
         grams.value = Math.round(it.grams);
         k100.value = Math.round(it.kcal_100g);
-        p100.value = Math.round((it.protein_100g || 0) * 10) / 10;
+        showMacros();
+        showUsual();
       } catch (err) {
         it.estimatedFor = null;
         $("fix-status").textContent = `Calcul impossible pour « ${n} » : ${err.message}`;
@@ -693,7 +831,11 @@ function renderDraft() {
       }
       refresh();
     };
-    grams.oninput = () => { it.grams = Number(grams.value) || 0; refresh(); };
+    grams.oninput = () => {
+      it.grams = Number(grams.value) || 0;
+      if (it.usual) { it.usual = false; showUsual(); }
+      refresh();
+    };
     k100.oninput = () => { it.kcal_100g = Number(k100.value) || 0; refresh(); };
     row.querySelector(".remove").onclick = () => {
       draft.water_ml = Math.max(0, (draft.water_ml || 0) - (it.drink_ml || 0));
@@ -767,7 +909,13 @@ function closeReview() {
   document.body.classList.remove("reviewing");
   loadDay();
 }
-$("cancel").onclick = closeReview;
+$("cancel").onclick = async () => {
+  if (draft?.queued && await confirmBox("Ne pas garder ce repas en attente ?", { title: "Repas en attente", ok: "Le supprimer" })) {
+    await queueDel(draft.queued);
+  }
+  closeReview();
+  renderPending();
+};
 $("save").onclick = async () => {
   const items = draft.items.filter((it) => it.name.trim());
   const water_ml = draft.water_ml || 0;
@@ -775,14 +923,25 @@ $("save").onclick = async () => {
   $("save").disabled = true;
   try {
     // The meal is filed under the displayed day (handy to catch up on yesterday)
-    const eaten_at = draft.id || day === todayISO() ? null : `${day}T12:00:00`;
-    await api(draft.id ? `/api/meals/${draft.id}` : "/api/meals", {
-      method: draft.id ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: draft.title || (items.length ? "Repas" : "Eau"), items, water_ml, eaten_at }),
-    });
+    const eaten_at = draft.eaten_at || (draft.id || day === todayISO() ? null : `${day}T12:00:00`);
+    const body = { title: draft.title || (items.length ? "Repas" : "Eau"), items: items.map(cleanItem), water_ml, eaten_at };
+    try {
+      await api(draft.id ? `/api/meals/${draft.id}` : "/api/meals", {
+        method: draft.id ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+    } catch (err) {
+      if (!(err instanceof OfflineError) || draft.id) throw err;
+      // no connection: keep the meal on the phone, sent automatically once back online
+      await queueAdd({ kind: "meal", body: { ...body, eaten_at: eaten_at || mealTime() } });
+      if (draft.queued) await queueDel(draft.queued);
+      closeReview();
+      renderPending();
+      return notice("Pas de connexion : le repas est gardé sur ton téléphone et sera envoyé tout seul au retour du réseau.", "Hors connexion");
+    }
+    if (draft.queued) await queueDel(draft.queued);
     const isNew = !draft.id && items.length;
     closeReview();
+    renderPending();
     if (isNew) celebrateStreak();
   } catch (err) {
     notice(err.message, "Erreur");
@@ -790,6 +949,91 @@ $("save").onclick = async () => {
     $("save").disabled = false;
   }
 };
+
+// ---------- Offline: meals saved, photos and texts kept until the connection is back ----------
+// IndexedDB (a photo is too big for localStorage). Entries: { id, user, kind: meal | photo | text, eaten_at… }
+let idb = null;
+function idbStore(mode) {
+  idb ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open("kcal", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("queue", { keyPath: "id", autoIncrement: true });
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  return idb.then((db) => db.transaction("queue", mode).objectStore("queue"));
+}
+const idbDo = (mode, fn) => idbStore(mode).then((st) => new Promise((resolve, reject) => {
+  const r = fn(st);
+  r.onsuccess = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+}));
+const queueAll = () => idbDo("readonly", (st) => st.getAll()).then((all) => all.filter((q) => q.user === me?.id)).catch(() => []);
+const queueAdd = (entry) => idbDo("readwrite", (st) => st.add({ ...entry, user: me.id, created: Date.now() }));
+const queueDel = (id) => idbDo("readwrite", (st) => st.delete(id));
+
+// time of a meal being saved: now, or noon on the day shown when catching up on a past day
+function mealTime() {
+  if (day !== todayISO()) return `${day}T12:00:00`;
+  const d = new Date();
+  return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+}
+const cleanItem = ({ name, grams, kcal_100g, protein_100g, carbs_100g, fat_100g, drink_ml, abv }) =>
+  ({ name, grams, kcal_100g, protein_100g: protein_100g || 0, carbs_100g: carbs_100g || 0, fat_100g: fat_100g || 0,
+     drink_ml: drink_ml || 0, abv: abv || 0 });
+
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !me) return;
+  flushing = true;
+  let sent = 0;
+  try {
+    for (const q of (await queueAll()).filter((q) => q.kind === "meal")) {
+      try {
+        await api("/api/meals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(q.body) });
+      } catch (err) {
+        // refused for good (invalid meal): dropped, so it isn't retried forever; otherwise retried later
+        if ([400, 413, 422].includes(err.status)) { await queueDel(q.id); continue; }
+        break;
+      }
+      await queueDel(q.id);
+      sent++;
+    }
+  } finally {
+    flushing = false;
+  }
+  if (sent) { loadDay().catch(() => {}); renderStreak(); }
+  renderPending();
+}
+
+async function renderPending() {
+  const all = await queueAll();
+  const meals = all.filter((q) => q.kind === "meal").length;
+  const toAnalyze = all.filter((q) => q.kind !== "meal");
+  const bar = $("pending-bar");
+  bar.hidden = !all.length;
+  if (!all.length) return;
+  const parts = [];
+  if (meals) parts.push(`${plural(meals, "repas")} en attente d'envoi`);
+  if (toAnalyze.length) parts.push(`${toAnalyze.length} repas à analyser`);
+  bar.innerHTML = `⏳ ${parts.join(" · ")}<small>${toAnalyze.length ? "Touche pour analyser" : "Envoi automatique au retour du réseau · touche pour réessayer"}</small>`;
+  bar.onclick = async () => {
+    await flushQueue();
+    const next = (await queueAll()).find((q) => q.kind !== "meal");
+    if (!next) return;
+    const when = new Date(next.eaten_at).toLocaleString("fr-FR", { weekday: "long", hour: "2-digit", minute: "2-digit" });
+    if (next.kind === "photo") {
+      const form = new FormData();
+      form.append("photo", next.blob, "repas.jpg");
+      analyze(() => api("/api/analyze", { method: "POST", body: form }),
+        { image: URL.createObjectURL(next.blob), caption: `📷 Photo prise ${when}`, pending: next });
+    } else {
+      analyze(() => api("/api/analyze-text", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: next.text }) }), { text: next.text, caption: `« ${next.text} » · ${when}`, pending: next });
+    }
+  };
+}
+window.addEventListener("online", flushQueue);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") flushQueue(); });
 
 // ---------- Navigation ----------
 $("prev").onclick = () => { day = shiftDay(day, -1); loadDay(); };
@@ -940,6 +1184,43 @@ $("goal-btn").onclick = () => {
   else openSettings();
 };
 $("water-gauge").onclick = () => editGoal("water_goal", "💧 Objectif d'eau", "ml", 20000);
+// Carbs and fat: set by hand in grams, else from the day's kcal goal
+// (fat 30 % of the calories, carbs the rest once protein and fat are counted)
+const FAT_SHARE = 0.3;
+function macroGoals(kcal, pGoal) {
+  const fatAuto = Math.round((kcal * FAT_SHARE) / 9);
+  const fat = me.fat_goal || fatAuto;
+  const carbsAuto = Math.max(0, Math.round((kcal - pGoal * 4 - fat * 9) / 4));
+  return { carbs: me.carbs_goal || carbsAuto, fat, carbsAuto, fatAuto };
+}
+const MACRO_LABELS = { carbs: ["🍞", "glucides", 1500], fat: ["🥑", "lipides", 500] };
+for (const k of ["carbs", "fat"]) {
+  $(`${k}-card`).onclick = () => {
+    const [icon, name, max] = MACRO_LABELS[k];
+    const auto = facts.mg?.[`${k}Auto`] ?? 0;
+    ask({
+      title: `${icon} Objectif de ${name}`,
+      fields: [
+        { key: "mode", type: "choice", label: "Calcul", value: me[`${k}_goal`] ? "grams" : "auto", options: [
+          { value: "auto", label: "Auto" }, { value: "grams", label: "En grammes" }] },
+        { key: "v", type: "number", label: "Objectif par jour", unit: "g", min: 1, max, step: 1, value: me[`${k}_goal`] || auto },
+        { key: "note", type: "note" },
+      ],
+      onChange(ui) {
+        const mode = ui.mode.get();
+        ui.v.label.hidden = mode === "auto";
+        ui.note.text.textContent = mode !== "auto" ? "Fixe, quel que soit ton objectif de calories du jour."
+          : k === "fat" ? `${Math.round(FAT_SHARE * 100)} % de tes calories du jour : ${fmt(auto)} g aujourd'hui (1 g = 9 kcal).`
+          : `Le reste de tes calories une fois protéines et lipides comptés : ${fmt(auto)} g aujourd'hui (1 g = 4 kcal).`;
+      },
+      onSubmit: async ({ mode, v }) => {
+        me = await api("/api/me", jsonPatch({ [`${k}_goal`]: mode === "auto" ? 0 : Math.round(v) }));
+        loadDay();
+      },
+    });
+  };
+}
+
 // Protein target: computed by the server (weight goal, or set manually in g or g/kg)
 const proteinGoal = () => me.protein_goal || 100;
 $("protein-card").onclick = () => {
@@ -1140,12 +1421,14 @@ $("account-btn").onclick = () => {
   $("account-email").textContent = me.email;
   $("open-invites").hidden = !me.is_admin;
   $("feat-protein").checked = me.show_protein;
+  $("feat-macros").checked = me.show_macros;
   $("feat-weight").checked = me.show_weight;
   $("account").showModal();
 };
 $("account-close").onclick = () => $("account").close();
 $("logout").onclick = async () => {
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  await window.caches?.delete("kcal-data-v1").catch(() => {});
   $("account").close();
   $("meals").innerHTML = "";
   showAuth();
@@ -1652,6 +1935,8 @@ async function refreshGoal() {
 
 // Features that can be turned off per account (account menu)
 function applyFeatures() {
+  $("macro-cards").hidden = !me.show_macros;
+  document.body.classList.toggle("show-macros", !!me.show_macros);
   $("protein-card").closest(".card-wrap").hidden = !me.show_protein;
   $("protein-card").closest(".minis").classList.toggle("two", me.show_protein);
   document.querySelectorAll(".when-weight").forEach((el) => (el.hidden = !me.show_weight));
@@ -1659,6 +1944,10 @@ function applyFeatures() {
 }
 $("feat-protein").onchange = async (e) => {
   try { me = await api("/api/me", jsonPatch({ show_protein: e.target.checked })); applyFeatures(); }
+  catch (err) { e.target.checked = !e.target.checked; notice(err.message, "Erreur"); }
+};
+$("feat-macros").onchange = async (e) => {
+  try { me = await api("/api/me", jsonPatch({ show_macros: e.target.checked })); applyFeatures(); loadDay(); }
   catch (err) { e.target.checked = !e.target.checked; notice(err.message, "Erreur"); }
 };
 $("feat-weight").onchange = async (e) => {
@@ -2257,6 +2546,7 @@ async function startApp() {
   applyFeatures();
   if (!me.onboarded) openOnboarding();
   loadDay().catch(showError);
+  flushQueue();
 }
 function showError(err) {
   if (!$("auth").hidden) return; // the login screen is already shown
@@ -2267,3 +2557,5 @@ function showError(err) {
 api("/api/me")
   .then((user) => { me = user; startApp(); })
   .catch(showError);
+// opens without a connection, with the last data seen (sw.js)
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

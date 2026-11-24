@@ -41,12 +41,13 @@
     </div>
     <button id="open-goal" class="sheet-btn when-weight">🎯 Mon objectif</button>
     <button id="open-weights" class="sheet-btn when-weight">📈 Évolution du poids</button>
-    <button id="open-week" class="sheet-btn">📊 Bilan de la semaine</button>
+    <button id="open-week" class="sheet-btn">📊 Bilan et calendrier</button>
     <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
     <button id="open-invites" class="sheet-btn" hidden>✉️ Inviter quelqu'un</button>
     <div class="features">
       <div class="features-title">Fonctionnalités</div>
       <label class="switch-row"><span>💪 Protéines</span><input id="feat-protein" type="checkbox" role="switch"></label>
+      <label class="switch-row"><span>🍞 Glucides et lipides</span><input id="feat-macros" type="checkbox" role="switch"></label>
       <label class="switch-row"><span>🎯 Objectif de poids et pesées</span><input id="feat-weight" type="checkbox" role="switch"></label>
     </div>
     <button id="open-onboard" class="sheet-btn">🦊 Reprendre la configuration</button>
@@ -174,9 +175,25 @@
 
   <dialog id="week-dialog" class="sheet settings week">
     <div class="sheet-head">
-      <strong>📊 Bilan de la semaine</strong>
+      <strong>📊 Bilan</strong>
       <button id="week-close" type="button" class="remove" aria-label="Fermer">×</button>
     </div>
+    <div class="chips view-tabs" role="tablist">
+      <button id="tab-week" class="chip active" type="button" role="tab" aria-selected="true">Semaine</button>
+      <button id="tab-month" class="chip" type="button" role="tab" aria-selected="false">Mois</button>
+    </div>
+    <div id="month-view" hidden>
+      <div class="week-nav">
+        <button id="month-prev" type="button" class="nav" aria-label="Mois précédent">‹</button>
+        <span id="month-label"></span>
+        <button id="month-next" type="button" class="nav" aria-label="Mois suivant">›</button>
+      </div>
+      <div id="month-grid" class="month-grid"></div>
+      <div class="week-key month-key"><span><i class="mk ok"></i>dans l'objectif</span><span><i class="mk off"></i>hors objectif</span><span><i class="mk logged"></i>noté</span></div>
+      <p id="month-summary" class="week-detail"></p>
+      <p class="hint">Touche un jour pour l'ouvrir.</p>
+    </div>
+    <div id="week-view">
     <div class="week-nav">
       <button id="week-prev" type="button" class="nav" aria-label="Semaine précédente">‹</button>
       <span id="week-range"></span>
@@ -189,6 +206,7 @@
     <div class="week-key"><span><i class="key-bar"></i>mangé</span><span><i class="key-goal"></i>objectif du jour</span></div>
     <p id="week-detail" class="week-detail"></p>
     <div id="week-stats" class="weight-stats"></div>
+    </div>
   </dialog>
 
   <dialog id="settings" class="sheet settings">
@@ -365,6 +383,25 @@
           <button class="info" type="button" data-info="water" aria-label="Comment c'est calculé ?">i</button>
         </div>
       </div>
+      <div id="macro-cards" class="cards two minis" hidden>
+        <div class="card-wrap">
+          <button id="carbs-card" class="card mini-card" type="button" aria-label="Glucides, toucher pour changer l'objectif">
+            <div class="card-label">🍞 Glucides</div>
+            <div class="mid"><span id="carbs-total">0</span> <small>/ <span id="carbs-goal">0</span> g</small></div>
+            <div class="bar"><div id="carbs-fill"></div></div>
+          </button>
+          <button class="info" type="button" data-info="carbs" aria-label="Comment c'est calculé ?">i</button>
+        </div>
+        <div class="card-wrap">
+          <button id="fat-card" class="card mini-card" type="button" aria-label="Lipides, toucher pour changer l'objectif">
+            <div class="card-label">🥑 Lipides</div>
+            <div class="mid"><span id="fat-total">0</span> <small>/ <span id="fat-goal">0</span> g</small></div>
+            <div class="bar"><div id="fat-fill"></div></div>
+          </button>
+          <button class="info" type="button" data-info="fat" aria-label="Comment c'est calculé ?">i</button>
+        </div>
+      </div>
+      <button id="pending-bar" class="pending-bar" type="button" hidden></button>
       <div id="goal-card" class="card goal-card" hidden>
         <button class="info" type="button" data-info="goal" aria-label="Comment c'est calculé ?">i</button>
         <div class="goal-head">
@@ -435,6 +472,9 @@
       <label>kcal/100g <input class="k100" type="number" inputmode="decimal" min="0"></label>
       <span class="kcal"></span>
       <label>prot/100g <input class="p100" type="number" inputmode="decimal" min="0"></label>
+      <label class="when-macros">gluc/100g <input class="c100" type="number" inputmode="decimal" min="0"></label>
+      <label class="when-macros">lip/100g <input class="f100" type="number" inputmode="decimal" min="0"></label>
+      <button class="usual" type="button" hidden></button>
     </div>
   </template>
 

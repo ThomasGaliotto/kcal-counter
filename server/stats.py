@@ -6,14 +6,16 @@
   in the goal's direction: under it when losing, above it when gaining, within ±10 % when maintaining.
 """
 
+import calendar
 import json
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from .auth import current_user
 from .db import db
-from .energy import energy
+from .energy import _cached, energy
+from .metabolism import daily_base
 
 router = APIRouter(prefix="/api")
 
@@ -73,11 +75,34 @@ def _totals(user_id: int, start: date, end: date) -> dict[str, dict]:
         ).fetchall()
     out: dict[str, dict] = {}
     for r in rows:
-        t = out.setdefault(r["day"], {"kcal": 0.0, "protein": 0.0, "water": 0.0})
+        t = out.setdefault(r["day"], {"kcal": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "water": 0.0})
         t["kcal"] += r["kcal"]
         t["water"] += r["water_ml"] or 0
-        t["protein"] += sum(i.get("grams", 0) * (i.get("protein_100g") or 0) / 100 for i in json.loads(r["items"]))
+        for i in json.loads(r["items"]):
+            for k in ("protein", "carbs", "fat"):
+                t[k] += i.get("grams", 0) * (i.get(f"{k}_100g") or 0) / 100
     return out
+
+
+EMPTY = {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "water": 0}
+
+
+def _cached_burned(user, d: date) -> float | None:
+    """A day's expenditure from the cache only (the month view must not call Strava/Garmin 31 times)."""
+    data, _ = _cached(user["id"], d, user["energy_source"])
+    if data is None:
+        return None
+    if user["energy_source"] == "garmin":
+        return data.get("total")
+    base, _ = daily_base(user)
+    return base + sum(a["kcal"] for a in data.get("activities", [])) if base is not None else None
+
+
+def _day_goal(user, d: date, cache_only: bool = False) -> float | None:
+    if user["energy_source"] == "none":
+        return user["kcal_goal"]
+    burned = _cached_burned(user, d) if cache_only else energy(day=d, user=user).get("burned")
+    return burned + user["balance_goal"] if burned is not None else None
 
 
 @router.get("/week")
@@ -92,15 +117,12 @@ def week(end: date | None = None, user=Depends(current_user)):
     days = []
     for k in range(7):
         d = start + timedelta(days=k)
-        t = totals.get(d.isoformat(), {"kcal": 0, "protein": 0, "water": 0})
-        goal = user["kcal_goal"]
-        if user["energy_source"] != "none":
-            burned = energy(day=d, user=user).get("burned")
-            goal = burned + user["balance_goal"] if burned is not None else None
+        t = totals.get(d.isoformat(), EMPTY)
+        goal = _day_goal(user, d)
         logged = t["kcal"] > 0
         days.append({
             "day": d.isoformat(), "kcal": round(t["kcal"]), "protein_g": round(t["protein"]),
-            "water_ml": round(t["water"]), "logged": logged, "goal": round(goal) if goal else None,
+            "carbs_g": round(t["carbs"]), "fat_g": round(t["fat"]), "water_ml": round(t["water"]), "logged": logged, "goal": round(goal) if goal else None,
             # today isn't over: it's shown, but not judged
             "on_target": on_target(t["kcal"], goal, direction) if logged and goal and d < today else None,
         })
@@ -135,7 +157,38 @@ def week(end: date | None = None, user=Depends(current_user)):
         "avg_goal": avg("goal", [d for d in logged if d["goal"]]),
         "prev_avg_kcal": round(sum(v["kcal"] for v in prev) / len(prev)) if prev else None,
         "avg_protein_g": avg("protein_g", logged),
+        "avg_carbs_g": avg("carbs_g", logged),
+        "avg_fat_g": avg("fat_g", logged),
         "avg_water_ml": avg("water_ml", [d for d in days if d["water_ml"] > 0]),
         "weight": weight,
         "streak": streak_of(logged_days(user["id"]), today),
     }
+
+
+@router.get("/month")
+def month(month: str | None = None, user=Depends(current_user)):
+    """Calendar of a month (YYYY-MM, default this one): per day, logged or not and on target or not."""
+    today = date.today()
+    try:
+        y, m = map(int, (month or today.strftime("%Y-%m")).split("-"))
+        start = date(y, m, 1)
+    except ValueError as exc:
+        raise HTTPException(400, "Mois invalide (AAAA-MM)") from exc
+    end = date(y, m, calendar.monthrange(y, m)[1])
+    totals = _totals(user["id"], start, min(end, today))
+    direction = _direction(user)
+    days = []
+    for k in range((end - start).days + 1):
+        d = start + timedelta(days=k)
+        t = totals.get(d.isoformat(), EMPTY)
+        logged = t["kcal"] > 0
+        goal = _day_goal(user, d, cache_only=True) if logged else None
+        days.append({"day": d.isoformat(), "kcal": round(t["kcal"]), "logged": logged,
+                     "goal": round(goal) if goal else None,
+                     "on_target": on_target(t["kcal"], goal, direction) if logged and goal and d < today else None})
+    judged = [d for d in days if d["on_target"] is not None]
+    first = logged_days(user["id"])
+    return {"month": start.strftime("%Y-%m"), "direction": direction, "days": days,
+            "logged_days": sum(d["logged"] for d in days),
+            "on_target_days": sum(1 for d in judged if d["on_target"]), "judged_days": len(judged),
+            "first_month": first[0].strftime("%Y-%m") if first else today.strftime("%Y-%m")}

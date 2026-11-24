@@ -16,12 +16,14 @@ The small **i** buttons on the cards explain how each number is computed.
 - `server/invites.py`: single-use invitation links, created by the admin
 - `server/goals.py`: weight goal, weigh-ins, protein target
 - `server/barcode.py`: packaged products by barcode (Open Food Facts)
-- `server/stats.py`: weekly summary and logging streaks
+- `server/stats.py`: weekly summary, month calendar and logging streaks
+- `server/portions.py`: learned portions (the grams you usually save for a food)
 - `server/energy.py`: energy expenditure from Strava or Garmin
 - `server/limits.py`: rate limits (login attempts, AI analyses)
 - `server/db.py`: SQLite database `data/kcal.db` and migrations
 - `server/backup.py`: nightly database backup
-- `web/`: the web app (PWA) for the iPhone; `web/vendor/` holds the ZXing barcode reader (Apache-2.0)
+- `web/`: the web app (PWA) for the iPhone; `web/sw.js` is the service worker (offline use);
+  `web/vendor/` holds the ZXing barcode reader (Apache-2.0)
 
 > The app's interface is in French.
 
@@ -45,6 +47,23 @@ account menu → **🦊 Reprendre la configuration** opens it again. Accounts cr
   re-estimates its values automatically.
 - **Correct the whole dish** with a comment, e.g. *"no rice, it was fries"*: the model recalculates every item.
 - Saved meals can be edited (✏️) or deleted (🗑) later.
+- **Learned portions**: every saved meal records the grams of each food. When a photo or a text proposes a food you've
+  saved at least twice, its portion becomes the median of your last 5 if it differs from the model's guess by more than
+  15 %. The review shows "↺ Ta portion habituelle"; tapping it goes back to the model's value. A quantity typed in the
+  text ("300 g de riz", "deux œufs") is always kept. Names are matched loosely (no accents, brand or words like "cuit").
+
+### Offline
+
+The app opens without a connection, with the last data seen (service worker, network first). A meal saved offline is
+kept on the phone (IndexedDB), shown as "⏳ en attente d'envoi" and counted in the day, then sent automatically when the
+connection is back (or when the app comes to the foreground). A photo or a text can't be analyzed offline: it's kept with
+its time, and a "⏳ à analyser" banner opens its analysis once online. Editing a saved meal needs the connection.
+
+## Carbs and fat
+
+Account menu → **Fonctionnalités → 🍞 Glucides et lipides** shows two more cards and the carbs / fat fields in the review.
+By default fat is 30 % of the day's calorie goal (9 kcal/g) and carbs are the rest once protein and fat are counted
+(4 kcal/g), so both follow the day's goal. Tap a card to set a fixed target in grams instead.
 
 ## Accounts and invitations
 
@@ -66,11 +85,14 @@ Everyone has their own log and goals, stored on the server.
 - 60 AI analyses per account per hour (photo, text, correction, ingredient), to keep the GPU available.
 - Uploaded photos are limited to 20 MB.
 
-## Weekly summary and streaks
+## Weekly summary, calendar and streaks
 
-**📊 Bilan de la semaine** (under the cards, or in the account menu) shows the last 7 days: calories eaten per day
+**📊 Bilan** (under the cards, or in the account menu) has two tabs. **Semaine** shows the last 7 days: calories eaten per day
 against that day's goal, average intake (and versus the week before), days logged, days on target, average protein
-and water, and the weight change. Arrows move week by week.
+and water (and carbs / fat when shown), and the weight change. Arrows move week by week.
+**Mois** is a calendar: each day is green when on target, orange when off, grey when logged but not judged; tapping a
+day opens it. With Strava/Garmin the month view only uses expenditure already fetched (it doesn't call the service for
+each day), so days never opened stay grey.
 
 - A day is **on target** when under its goal (+5 %) for weight loss, above it (−5 %) for muscle gain, within ±10 % for
   maintenance. Today isn't judged until it's over.

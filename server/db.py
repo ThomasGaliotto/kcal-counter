@@ -45,6 +45,9 @@ USER_COLUMNS = {
     "onboarded": "INTEGER NOT NULL DEFAULT 0",         # first-run setup done (or skipped)
     "show_protein": "INTEGER NOT NULL DEFAULT 1",      # features shown (set per account)
     "show_weight": "INTEGER NOT NULL DEFAULT 1",       # weight goal, weigh-ins, chart
+    "show_macros": "INTEGER NOT NULL DEFAULT 0",       # carbs and fat cards
+    "carbs_goal": "INTEGER",                           # g/day set by hand (empty = auto, from the kcal goal)
+    "fat_goal": "INTEGER",                             # g/day set by hand (empty = auto, 30 % of the kcal goal)
     "strava_athlete": "TEXT",
     "strava_access": "TEXT",
     "strava_refresh": "TEXT",
@@ -104,6 +107,7 @@ def db() -> sqlite3.Connection:
             conn.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
             if name == "onboarded":  # accounts that existed before the setup screens skip it
                 conn.execute("UPDATE users SET onboarded = 1")
+    had_portions = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'portion_log'").fetchone()
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS energy_cache (
@@ -134,10 +138,23 @@ def db() -> sqlite3.Connection:
             data TEXT NOT NULL,                -- product as an item (JSON), from Open Food Facts
             fetched_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS portion_log (    -- grams actually saved per food, to learn usual portions
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+            food TEXT NOT NULL,                -- normalized food name
+            grams REAL NOT NULL,
+            at TEXT NOT NULL,
+            PRIMARY KEY (meal_id, food)
+        );
+        CREATE INDEX IF NOT EXISTS portion_log_food ON portion_log(user_id, food, at);
         CREATE TABLE IF NOT EXISTS strava_activity_kcal (
             activity_id INTEGER PRIMARY KEY,
             kcal REAL NOT NULL
         );
         """
     )
+    if not had_portions:
+        from .portions import backfill  # late import: portions uses db()
+        backfill(conn)
+        conn.commit()
     return conn

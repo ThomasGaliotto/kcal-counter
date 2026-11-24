@@ -494,3 +494,41 @@ body.reviewing .add-text { display: none; }
 .key-goal { width: 14px; height: 2px; border-radius: 1px; background: var(--text); opacity: .55; }
 .week-detail { min-height: 2.6em; margin: 8px 2px; font-size: 14px; color: var(--muted); line-height: 1.35; }
 .week-detail b { color: var(--text); }
+
+/* ---------- Carbs / fat ---------- */
+#carbs-fill { height: 100%; width: 0; background: #d6b36a; transition: width .3s; }
+#fat-fill { height: 100%; width: 0; background: #f472b6; transition: width .3s; }
+body:not(.show-macros) .when-macros { display: none; }
+
+/* ---------- Learned portion (review) ---------- */
+.item .usual {
+  grid-column: 1 / -1; justify-self: start; background: none; border: 0; padding: 0;
+  color: var(--muted); font-size: 12px; text-align: left; cursor: pointer;
+}
+.item .usual b { color: var(--accent); font-weight: 600; }
+
+/* ---------- Month calendar ---------- */
+.view-tabs { margin: 0 0 10px; }
+.month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.month-grid .wd { text-align: center; color: var(--muted); font-size: 11px; padding-bottom: 2px; }
+.mday {
+  aspect-ratio: 1; border: 0; border-radius: 10px; background: var(--bg); color: var(--muted);
+  font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+}
+.mday:disabled { opacity: .35; cursor: default; }
+.mday.logged { background: var(--line); color: var(--text); }
+.mday.ok { background: color-mix(in srgb, var(--accent) 32%, var(--bg)); color: var(--text); font-weight: 600; }
+.mday.off { background: color-mix(in srgb, var(--warn) 32%, var(--bg)); color: var(--text); font-weight: 600; }
+.mday.today { outline: 2px solid var(--text); outline-offset: -2px; }
+.month-key .mk { width: 10px; height: 10px; border-radius: 3px; }
+.mk.ok { background: color-mix(in srgb, var(--accent) 60%, var(--bg)); }
+.mk.off { background: color-mix(in srgb, var(--warn) 60%, var(--bg)); }
+.mk.logged { background: var(--line); }
+
+/* ---------- Offline queue ---------- */
+.pending-bar {
+  display: block; width: 100%; margin-top: 10px; padding: 12px 14px; border-radius: 16px; text-align: left;
+  border: 1px dashed var(--line); background: transparent; color: var(--text); font-size: 14px; cursor: pointer;
+}
+.pending-bar small { display: block; color: var(--muted); margin-top: 2px; }
+.meal.pending { opacity: .7; border: 1px dashed var(--line); }

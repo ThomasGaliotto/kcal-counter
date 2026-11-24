@@ -24,6 +24,7 @@ from .goals import router as goals_router
 from .invites import router as invites_router
 from .metabolism import router as metabolism_router
 from .stats import router as stats_router
+from . import portions
 
 WEB_DIR = ROOT / "web"
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -181,8 +182,9 @@ def _clean_item(it: dict) -> dict:
 PLAIN_WATER = re.compile(r"^(grand |petit )?(verre |bouteille |carafe )?(d'|d’)?eau( plate| gazeuse| pétillante| minérale| du robinet)?$", re.I)
 
 
-async def ask_model(message: dict) -> dict:
-    """Analysis -> cleaned items, and water_ml = plain water + every non-alcoholic drink."""
+async def ask_model(message: dict, learn_for: int | None = None) -> dict:
+    """Analysis -> cleaned items, and water_ml = plain water + every non-alcoholic drink.
+    learn_for: user id whose usual portions replace the model's guesses."""
     result = await _chat(message, SCHEMA)
     plain = max(0.0, float(result.get("water_ml") or 0))
     items = []
@@ -191,6 +193,8 @@ async def ask_model(message: dict) -> dict:
             plain = plain or (it["drink_ml"] or it["grams"])  # water put in items by mistake
             continue
         items.append(it)
+    if learn_for:
+        portions.apply(learn_for, items)
     result["items"] = items
     result["water_ml"] = round((plain + sum(it["drink_ml"] for it in items)) / 10) * 10
     return result
@@ -203,7 +207,7 @@ async def analyze(photo: UploadFile = File(...), user=Depends(current_user)):
     if len(raw) > MAX_UPLOAD:
         raise HTTPException(413, "Photo trop lourde (20 Mo max)")
     image_b64 = shrink(raw)
-    return await ask_model({"role": "user", "content": PROMPT, "images": [image_b64]})
+    return await ask_model({"role": "user", "content": PROMPT, "images": [image_b64]}, learn_for=user["id"])
 
 
 class MealText(BaseModel):
@@ -214,7 +218,9 @@ class MealText(BaseModel):
 async def analyze_text(body: MealText, user=Depends(current_user)):
     ai_limit.check(f"user:{user['id']}")
     """Repas décrit en texte (« une pomme et un verre d'eau ») : même format que l'analyse photo."""
-    return await ask_model({"role": "user", "content": TEXT_PROMPT + body.text.strip()})
+    text = body.text.strip()
+    learn = None if portions.QUANTITY.search(text) else user["id"]  # a quantity typed by the user wins
+    return await ask_model({"role": "user", "content": TEXT_PROMPT + text}, learn_for=learn)
 
 
 class Item(BaseModel):
@@ -291,6 +297,8 @@ async def estimate_item(body: ItemQuery, user=Depends(current_user)):
                                  ITEM_SCHEMA))
     if body.grams:
         it["grams"] = round(body.grams)
+    else:
+        portions.apply(user["id"], [it], asked=body.name)
     return it
 
 
@@ -306,6 +314,7 @@ def save_meal(meal: Meal, user=Depends(current_user)):
             (user["id"], when.isoformat(), when.date().isoformat(), meal.title,
              json.dumps([i.model_dump() for i in meal.items]), kcal, max(0, meal.water_ml)),
         )
+        portions.record(conn, user["id"], cur.lastrowid, [i.model_dump() for i in meal.items])
     return {"id": cur.lastrowid, "kcal": round(kcal)}
 
 
@@ -322,9 +331,9 @@ def list_meals(day: date | None = None, user=Depends(current_user)):
         "day": day.isoformat(),
         "total_kcal": round(sum(m["kcal"] for m in meals)),
         "total_water_ml": round(sum(m["water_ml"] for m in meals)),
-        "total_protein_g": round(sum(
-            i.get("grams", 0) * (i.get("protein_100g") or 0) / 100 for m in meals for i in m["items"]
-        )),
+        **{f"total_{k}_g": round(sum(
+            i.get("grams", 0) * (i.get(f"{k}_100g") or 0) / 100 for m in meals for i in m["items"]
+        )) for k in ("protein", "carbs", "fat")},
         # grams of pure alcohol: volume × strength × ethanol density (0.789)
         "total_alcohol_g": round(sum(
             i.get("grams", 0) * (i.get("abv") or 0) / 100 * 0.789 for m in meals for i in m["items"]
@@ -349,6 +358,7 @@ def update_meal(meal_id: int, meal: Meal, user=Depends(current_user)):
             (when.isoformat(), when.date().isoformat(), meal.title,
              json.dumps([i.model_dump() for i in meal.items]), kcal, max(0, meal.water_ml), meal_id),
         )
+        portions.record(conn, user["id"], meal_id, [i.model_dump() for i in meal.items])
     return {"id": meal_id, "kcal": round(kcal)}
 
 

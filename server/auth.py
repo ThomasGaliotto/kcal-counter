@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
-    "protein_mode", "protein_value", "show_protein", "show_weight", "morphology", "body_fat_pct", "calibrate", "onboarded",
+    "protein_mode", "protein_value", "show_protein", "show_weight", "show_macros", "carbs_goal", "fat_goal", "morphology", "body_fat_pct", "calibrate", "onboarded",
 )
 
 
@@ -60,6 +60,7 @@ def is_admin(user) -> bool:
 def _public(user) -> dict:
     data = {k: user[k] for k in PUBLIC_FIELDS}
     data["show_protein"], data["show_weight"] = bool(user["show_protein"]), bool(user["show_weight"])
+    data["show_macros"] = bool(user["show_macros"])
     data["calibrate"] = bool(user["calibrate"])
     data["onboarded"] = bool(user["onboarded"])
     data["is_admin"] = is_admin(user)
@@ -126,6 +127,9 @@ class Profile(BaseModel):
     life_factor: float | None = Field(None, ge=1.0, le=2.0)
     show_protein: bool | None = None
     show_weight: bool | None = None
+    show_macros: bool | None = None
+    carbs_goal: int | None = Field(None, ge=0, le=1500)  # 0 = back to auto
+    fat_goal: int | None = Field(None, ge=0, le=500)     # 0 = back to auto
     morphology: int | None = Field(None, ge=0, le=5)  # 0 = clear
     body_fat_pct: float | None = Field(None, ge=0, le=70)  # 0 = clear
     calibrate: bool | None = None
@@ -213,7 +217,7 @@ def me(user=Depends(current_user)):
 @router.patch("/me")
 def update_me(body: Profile, user=Depends(current_user)):
     changes = body.model_dump(exclude_none=True)
-    for key in ("morphology", "body_fat_pct"):  # 0 means "remove it"
+    for key in ("morphology", "body_fat_pct", "carbs_goal", "fat_goal"):  # 0 means "remove it"
         if changes.get(key) == 0:
             changes[key] = None
     if changes:
