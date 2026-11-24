@@ -24,11 +24,10 @@
         <button id="tab-register" class="tab" type="button">Créer un compte</button>
       </div>
       <form id="auth-form">
-        <input id="auth-name" class="register-only" autocomplete="nickname" placeholder="Pseudo" hidden>
+        <input id="auth-name" class="register-only" autocomplete="name" placeholder="Prénom" hidden>
         <input id="auth-email" type="email" autocomplete="email" autocapitalize="off" placeholder="E-mail" required>
         <input id="auth-password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="8" required>
         <input id="auth-invite" class="register-only invite-only" autocapitalize="off" placeholder="Code d'invitation" hidden>
-        <p class="hint register-only privacy-note" hidden>🔒 Ton e-mail n'est pas conservé: seule une empreinte sert à te reconnaître à la connexion. Personne, l'administrateur compris, ne peut le lire.</p>
         <p id="auth-error" class="error" hidden></p>
         <button id="auth-submit" class="primary" type="submit">Se connecter</button>
       </form>
@@ -37,7 +36,7 @@
 
   <dialog id="account" class="sheet">
     <div class="sheet-head">
-      <div><strong id="account-name"></strong><div class="muted">🔒 E-mail non conservé (empreinte seulement)</div></div>
+      <div><strong id="account-name"></strong><div id="account-email" class="muted"></div></div>
       <button id="account-close" class="remove" aria-label="Fermer">×</button>
     </div>
     <button id="open-goal" class="sheet-btn when-weight">🎯 Mon objectif</button>

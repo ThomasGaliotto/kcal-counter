@@ -543,12 +543,12 @@ body:not(.show-macros) .when-macros { display: none; }
   background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
 }
-.tabbar .tab {
+.tab {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative;
   background: none; border: 0; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
-.tabbar .tab.active { color: var(--accent); background: none; }
-.tabbar .tab .streak-badge { position: absolute; top: 5px; left: calc(50% + 16px); padding: 1px 7px; font-size: 11px; }
+.tab.active { color: var(--accent); }
+.tab .streak-badge { position: absolute; top: 5px; left: calc(50% + 16px); padding: 1px 7px; font-size: 11px; }
 body.reviewing .tabbar { display: none; }
 body.on-recap .day .nav { visibility: hidden; }
 

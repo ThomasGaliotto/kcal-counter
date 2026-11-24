@@ -1473,9 +1473,9 @@ function renderInvites(list) {
     const row = document.createElement("div");
     row.className = "invite-row";
     row.innerHTML = '<div class="invite-info"><b></b><small></small></div>';
-    row.querySelector("b").textContent = inv.note || "Invitation utilisée";
+    row.querySelector("b").textContent = inv.note;
     row.querySelector("small").textContent =
-      inv.status === "used" ? `✅ Utilisée le ${fmtShort(inv.used_at)} · plus liée à personne`
+      inv.status === "used" ? `✅ Compte créé${inv.used_name ? " par " + inv.used_name : ""} le ${fmtShort(inv.used_at)}`
       : inv.status === "expired" ? `Expirée le ${fmtShort(inv.expires_at)}`
       : `En attente · expire le ${fmtShort(inv.expires_at)}`;
     if (inv.status === "pending") {
@@ -1505,7 +1505,7 @@ $("invites-close").onclick = () => $("invites-dialog").close();
 $("invite-new").onclick = () => ask({
   title: "Nouvelle invitation",
   submit: "Créer le lien",
-  fields: [{ key: "note", label: "Pour qui (effacé dès que le lien est utilisé)", value: "" }],
+  fields: [{ key: "note", label: "Prénom de la personne", value: "" }],
   onSubmit: async ({ note }) => {
     const res = await api("/api/invites", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }),
@@ -1545,6 +1545,7 @@ function authError(msg) {
 
 $("account-btn").onclick = () => {
   $("account-name").textContent = me.name;
+  $("account-email").textContent = me.email;
   $("open-invites").hidden = !me.is_admin;
   $("feat-protein").checked = me.show_protein;
   $("feat-macros").checked = me.show_macros;

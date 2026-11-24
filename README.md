@@ -87,7 +87,7 @@ By default fat is 30 % of the day's calorie goal (9 kcal/g) and carbs are the re
 
 ## Accounts and invitations
 
-Each person creates their own account in the app (pseudo, e-mail, password of at least 8 characters).
+Each person creates their own account in the app (first name, e-mail, password of at least 8 characters).
 Everyone has their own log and goals, stored on the server.
 
 - The **first account created** is the administrator. It doesn't need an invitation, and it takes over
@@ -98,13 +98,6 @@ Everyone has their own log and goals, stored on the server.
 - Optional: `KCAL_INVITE_CODE` sets a shared, reusable code accepted in addition to invitations;
   `KCAL_OPEN_SIGNUP=1` turns invitations off entirely (anyone can sign up).
 - Passwords are stored hashed (scrypt). A session lasts 180 days.
-- **E-mails are not stored**: only a fingerprint (scrypt of the lowercased address, fixed salt) used to find the account
-  at login. Nobody, the administrator included, can read the addresses back; one can only check whether a given address
-  has an account. Consequences: no "forgot password" by e-mail, and the account menu can't show the address.
-  Accounts from before are converted on start.
-- **Invitations forget who they were for**: once used, the note ("pour qui") is erased and the invitation is no longer
-  linked to the account it opened. SQLite's `secure_delete` wipes the replaced data from the file.
-  Nightly backups made before still hold the old data until they rotate out (14 days).
 
 ### Protection
 
