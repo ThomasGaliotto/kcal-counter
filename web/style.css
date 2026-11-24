@@ -552,5 +552,5 @@ body.on-recap .day .nav { visibility: hidden; }
 .recap-card .primary.wide { margin-top: 12px; }
 .weigh-list-box { margin-top: 12px; }
 .weigh-list-box summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 2px; }
-.add-text { margin: 14px 0 0; }
+.add-text { margin: 0 0 10px; }
 body.on-recap { padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); }
