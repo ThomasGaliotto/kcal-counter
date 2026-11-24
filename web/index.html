@@ -266,6 +266,7 @@
       </div>
       <div id="result" hidden>
         <input id="meal-title" class="meal-title" aria-label="Nom du repas">
+        <div id="moment" class="moment" role="group" aria-label="Moment du repas"></div>
         <div id="items"></div>
         <div id="water-row" class="water-row" hidden>
           <span>💧 Hydratation</span>
@@ -361,6 +362,7 @@
     <div id="columns" class="columns">
       <section class="col">
         <h2 class="col-title" id="meals-title" hidden>Repas</h2>
+        <div id="gaps" class="gaps"></div>
         <button id="text-btn" class="add-text" type="button">✍️ Ajouter un repas en texte</button>
         <div id="meals"></div>
         <p id="empty" class="empty" hidden>Aucun repas ce jour-là.</p>
@@ -426,7 +428,7 @@
           <button id="month-next" type="button" class="nav" aria-label="Mois suivant">›</button>
         </div>
         <div id="month-grid" class="month-grid"></div>
-        <div class="week-key month-key"><span><i class="mk ok"></i>dans l'objectif</span><span><i class="mk off"></i>hors objectif</span><span><i class="mk logged"></i>noté</span></div>
+        <div class="week-key month-key"><span><i class="mk ok"></i>dans l'objectif</span><span><i class="mk off"></i>hors objectif</span><span><i class="mk logged"></i>noté</span><span><i class="mk partial"></i>incomplet</span></div>
         <p id="month-summary" class="week-detail"></p>
         <p class="hint">Touche un jour pour l'ouvrir.</p>
       </div>
@@ -440,7 +442,7 @@
       <div class="chart-wrap">
         <svg id="week-chart" role="img" aria-label="Calories mangées par jour"></svg>
       </div>
-      <div class="week-key"><span><i class="key-bar"></i>mangé</span><span><i class="key-goal"></i>objectif du jour</span></div>
+      <div class="week-key"><span><i class="key-bar"></i>mangé</span><span><i class="key-goal"></i>objectif du jour</span><span id="key-partial" hidden><i class="key-bar partial"></i>incomplet</span></div>
       <p id="week-detail" class="week-detail"></p>
       <div id="week-stats" class="weight-stats"></div>
       </div>

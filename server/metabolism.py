@@ -90,7 +90,9 @@ def calibration(user) -> dict:
             "SELECT day, data FROM energy_cache WHERE user_id = ? AND source = 'strava' AND day BETWEEN ? AND ?",
             (user["id"], start.isoformat(), end.isoformat()),
         ).fetchall() if user["energy_source"] == "strava" else []
-    logged = {r["day"]: r["kcal"] for r in rows if r["kcal"] >= MIN_DAY_KCAL}
+    from .gaps import incomplete_days  # late import: gaps -> auth -> … -> metabolism
+    incomplete = incomplete_days(user["id"], start, end)  # a forgotten meal would skew the result
+    logged = {r["day"]: r["kcal"] for r in rows if r["kcal"] >= MIN_DAY_KCAL and r["day"] not in incomplete}
     out["days_logged"], out["weighins"] = len(logged), len(weights)
     if weights:
         out["span_days"] = (date.fromisoformat(weights[-1]["day"]) - date.fromisoformat(weights[0]["day"])).days

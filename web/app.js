@@ -91,6 +91,7 @@ async function loadDay() {
 
   renderGoalCard();
   renderStreak();
+  renderGaps(shownDay);
 
   // ----- Protein
   const pGoal = proteinGoal();
@@ -374,17 +375,20 @@ async function onPhoto(e) {
 }
 
 // Meal described in text: "an apple and a glass of water"
-$("text-btn").onclick = () => ask({
-  title: "✍️ Ajouter en texte",
+// moment: { day, time } when filling a forgotten meal
+const askText = (moment = null) => ask({
+  title: moment ? `✍️ ${SLOTS.find((s) => s.time === moment.time)?.label || "Repas"} oublié` : "✍️ Ajouter en texte",
   submit: "Analyser",
   fields: [{ key: "text", type: "textarea", label: "Qu'as-tu mangé ou bu ?", voice: true,
              placeholder: "ex : une pomme, un yaourt et un verre d'eau" }],
   onSubmit: ({ text }) => {
+    nextMoment = moment;
     analyze(() => api("/api/analyze-text", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
     }), { text, queue: { kind: "text", text } });
   },
 });
+$("text-btn").onclick = () => askText();
 
 // ---------- Dictation (Web Speech API; on iPhone the keyboard's 🎤 key also works) ----------
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -489,6 +493,46 @@ function lookupBarcode(code) {
       throw new Error(`${err.message}. Ajoute-le avec « + Aliment » ou décris-le en texte.`);
     }
   }, { caption: `📦 Code-barres ${code}` });
+}
+
+// ---------- Forgotten meals: usual meals not logged (server/gaps.py) ----------
+async function renderGaps(shownDay) {
+  const box = $("gaps");
+  const today = todayISO();
+  const [g, y] = await Promise.all([
+    api(`/api/gaps?day=${shownDay}`).catch(() => null),
+    shownDay === today ? api(`/api/gaps?day=${shiftDay(today, -1)}`).catch(() => null) : null,
+  ]);
+  if (shownDay !== day) return;
+  box.innerHTML = "";
+  for (const m of g?.missing || []) {
+    const el = document.createElement("div");
+    el.className = "gap";
+    el.innerHTML = `<div class="gap-head"></div><div class="gap-actions">
+        <button type="button" class="chip usual"></button>
+        <button type="button" class="chip describe">✍️ Décrire</button>
+        <button type="button" class="chip skip">Sauté</button></div>`;
+    el.querySelector(".gap-head").textContent = `🍽️ Pas de ${m.label} noté`;
+    el.querySelector(".usual").textContent = `≈ Habituel · ${fmt(m.usual_kcal)} kcal`;
+    el.querySelector(".usual").title = `Ajouter ton ${m.label} habituel, à ajuster`;
+    el.querySelector(".usual").onclick = () => openDraft({
+      title: m.usual.title, items: m.usual.items.map((it) => ({ ...it })), water_ml: m.usual.water_ml || 0,
+      day: g.day, time: m.time, timeTouched: true,
+    }, `≈ Ton ${m.label} habituel : ajuste si tu te souviens de ce que c'était.`);
+    el.querySelector(".describe").onclick = () => askText({ day: g.day, time: m.time });
+    el.querySelector(".skip").onclick = async () => {
+      await api("/api/gaps/skip", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ day: g.day, slot: m.slot }) }).catch((err) => notice(err.message, "Erreur"));
+      renderGaps(day);
+    };
+    box.append(el);
+  }
+  if (y?.missing?.length) {
+    const link = Object.assign(document.createElement("button"), { type: "button", className: "gap-link" });
+    link.textContent = `Hier : ${y.missing.map((m) => m.label).join(", ")} non noté${y.missing.length > 1 ? "s" : ""} ›`;
+    link.onclick = () => { day = y.day; loadDay(); };
+    box.append(link);
+  }
 }
 
 // ---------- Streak ----------
@@ -598,11 +642,12 @@ async function renderMonth() {
     b.type = "button";
     const n = Number(d.day.slice(8));
     b.textContent = n;
-    const state = d.on_target === true ? "ok" : d.on_target === false ? "off" : d.logged ? "logged" : "";
+    const state = d.complete === false ? "partial" : d.on_target === true ? "ok" : d.on_target === false ? "off" : d.logged ? "logged" : "";
     b.className = `mday ${state}${d.day === today ? " today" : ""}`;
     b.disabled = d.day > today;
     const what = !d.logged ? "rien de noté" : `${fmt(d.kcal)} kcal${d.goal ? ` sur ${fmt(d.goal)} visées` : ""}` +
-      (state === "ok" ? ", dans l'objectif" : state === "off" ? ", hors objectif" : "");
+      (state === "ok" ? ", dans l'objectif" : state === "off" ? ", hors objectif"
+        : state === "partial" ? `, incomplet (${d.missing.map(slotName).join(", ")} non noté)` : "");
     b.setAttribute("aria-label", `${longDay(d.day)} : ${what}`);
     b.title = what;
     b.onclick = () => { day = d.day; setTab("day"); loadDay(); };
@@ -611,7 +656,8 @@ async function renderMonth() {
   const verdict = { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[res.direction];
   $("month-summary").innerHTML = res.logged_days
     ? `<b>${plural(res.logged_days, "jour")} noté${res.logged_days > 1 ? "s" : ""}</b>` +
-      (res.judged_days ? ` · <b>${res.on_target_days} / ${res.judged_days}</b> dans l'objectif (${verdict})` : "")
+      (res.judged_days ? ` · <b>${res.on_target_days} / ${res.judged_days}</b> dans l'objectif (${verdict})` : "") +
+      (res.incomplete_days ? ` · ${plural(res.incomplete_days, "jour")} incomplet${res.incomplete_days > 1 ? "s" : ""}` : "")
     : "Rien de noté ce mois-ci.";
 }
 $("week-prev").onclick = () => { weekEnd = shiftDay(weekEnd, -7); renderWeek(); };
@@ -646,8 +692,10 @@ async function renderWeek() {
 
   const tiles = [];
   const tile = (label, value, sub = "") => tiles.push(`<div><small>${label}</small><b>${value}</b>${sub ? `<small>${sub}</small>` : ""}</div>`);
-  tile("Moyenne", w.avg_kcal != null ? `${fmt(w.avg_kcal)} kcal` : "—", w.avg_goal ? `/ jour · visé ~${fmt(w.avg_goal)}` : "par jour noté");
-  tile("Jours notés", `${w.logged_days} / 7`);
+  tile("Moyenne", w.avg_kcal != null ? `${fmt(w.avg_kcal)} kcal` : "—",
+    (w.avg_goal ? `/ jour · visé ~${fmt(w.avg_goal)}` : "par jour noté") + (w.incomplete_days ? " · hors incomplets" : ""));
+  $("key-partial").hidden = !w.incomplete_days;
+  tile("Jours notés", `${w.logged_days} / 7`, w.incomplete_days ? `dont ${plural(w.incomplete_days, "incomplet")}` : "");
   tile("Dans l'objectif", w.judged_days ? `${w.on_target_days} / ${w.judged_days}` : "—",
        { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[w.direction]);
   if (w.avg_kcal != null && w.prev_avg_kcal != null) tile("vs semaine d'avant", `${signed(w.avg_kcal - w.prev_avg_kcal)} kcal`, "par jour");
@@ -677,7 +725,7 @@ function drawWeekChart(w) {
       // rounded top, square base on the baseline
       const yt = Math.min(y(d.kcal), base - r);
       svgEl("path", {
-        class: `wbar${d.on_target === false ? " over" : ""}${d.day === today ? " today" : ""}`,
+        class: `wbar${d.on_target === false ? " over" : ""}${d.complete === false ? " partial" : ""}${d.day === today ? " today" : ""}`,
         d: `M${x0},${base} V${yt + r} Q${x0},${yt} ${x0 + r},${yt} H${x1 - r} Q${x1},${yt} ${x1},${yt + r} V${base} Z`,
       }, svg);
     } else {
@@ -702,7 +750,8 @@ function selectWeekDay(i) {
     $("week-detail").innerHTML = `<b>${name}</b><br>Rien de noté.`;
     return;
   }
-  const verdict = d.on_target === true ? " · dans l'objectif ✓"
+  const verdict = d.complete === false ? ` · incomplet (${d.missing.map(slotName).join(", ")} non noté)`
+    : d.on_target === true ? " · dans l'objectif ✓"
     : d.on_target === false ? " · hors objectif" : d.day === todayISO() ? " · journée en cours" : "";
   const bits = [`<b>${fmt(d.kcal)} kcal</b>${d.goal ? ` / ${fmt(d.goal)} visés` : ""}${verdict}`];
   if (me.show_protein) bits.push(`${fmt(d.protein_g)} g de protéines`);
@@ -712,12 +761,56 @@ function selectWeekDay(i) {
 }
 
 // Edit a saved meal: same screen as the review after analysis
-function editMeal(m) {
-  draft = { id: m.id, title: m.title, items: m.items.map((it) => ({ ...it })), water_ml: m.water_ml || 0 };
+// ---------- Meal moment: breakfast, lunch, snack, dinner (kept in sync with SLOTS in server/gaps.py) ----------
+const SLOTS = [
+  { key: "breakfast", label: "Petit-déj", name: "petit-déjeuner", time: "08:00", from: 5, to: 10.5 },
+  { key: "lunch", label: "Déjeuner", name: "déjeuner", time: "12:30", from: 10.5, to: 15 },
+  { key: "snack", label: "Goûter", name: "goûter", time: "16:30", from: 15, to: 18 },
+  { key: "dinner", label: "Dîner", name: "dîner", time: "20:00", from: 18, to: 29 },
+];
+const slotName = (key) => SLOTS.find((s) => s.key === key)?.name || key;
+const nowHM = () => new Date().toTimeString().slice(0, 5);
+function slotOfTime(hm) {
+  let h = Number(hm.slice(0, 2)) + Number(hm.slice(3, 5)) / 60;
+  if (h < 5) h += 24;
+  return SLOTS.find((s) => h >= s.from && h < s.to)?.key;
+}
+let nextMoment = null; // set by a "forgotten meal" banner for the next analysis
+// where a new meal goes: now on today, noon on a past day, or the moment asked for
+function momentDefaults() {
+  const m = nextMoment;
+  nextMoment = null;
+  if (m) return { day: m.day, time: m.time, timeTouched: true };
+  return { day, time: day === todayISO() ? nowHM() : "12:00", timeTouched: false };
+}
+function renderMoment() {
+  const box = $("moment");
+  box.innerHTML = "";
+  const current = slotOfTime(draft.time || "12:00");
+  for (const s of SLOTS) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: s.label });
+    b.classList.toggle("active", s.key === current);
+    b.setAttribute("aria-pressed", s.key === current);
+    b.onclick = () => { Object.assign(draft, { time: s.time, timeTouched: true }); renderMoment(); };
+    box.append(b);
+  }
+  const t = Object.assign(document.createElement("input"), { type: "time", value: draft.time || "12:00", className: "moment-time" });
+  t.setAttribute("aria-label", "Heure du repas");
+  t.onchange = () => { if (t.value) { Object.assign(draft, { time: t.value, timeTouched: true }); renderMoment(); } };
+  box.append(t);
+  if (draft.day && draft.day !== todayISO()) {
+    box.append(Object.assign(document.createElement("small"), { className: "moment-day", textContent: dayLabel(draft.day) }));
+  }
+}
+
+// Open the review screen on a ready-made meal (edit, usual meal)
+function openDraft(d, caption = "") {
+  draft = d;
   $("review").hidden = false;
   document.body.classList.add("reviewing");
   $("preview").hidden = true;
-  $("review-text").hidden = true;
+  $("review-text").hidden = !caption;
+  $("review-text").textContent = caption;
   $("analyzing").hidden = true;
   $("error").hidden = true;
   $("fix-status").hidden = true;
@@ -726,8 +819,15 @@ function editMeal(m) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function editMeal(m) {
+  openDraft({ id: m.id, title: m.title, items: m.items.map((it) => ({ ...it })), water_ml: m.water_ml || 0,
+              day: m.eaten_at.slice(0, 10), time: m.eaten_at.slice(11, 16), timeTouched: false });
+}
 async function analyze(request, { image, text, caption, queue, pending }) {
   draft = null;
+  const moment = pending
+    ? { day: pending.eaten_at.slice(0, 10), time: pending.eaten_at.slice(11, 16), timeTouched: false }
+    : momentDefaults();
   $("review").hidden = false;
   document.body.classList.add("reviewing");
   $("empty").hidden = true;
@@ -743,7 +843,7 @@ async function analyze(request, { image, text, caption, queue, pending }) {
   window.scrollTo({ top: 0, behavior: "smooth" });
   try {
     const res = await request();
-    draft = { title: res.title || "Repas", items: res.items || [], water_ml: res.water_ml || 0 };
+    draft = { title: res.title || "Repas", items: res.items || [], water_ml: res.water_ml || 0, ...moment };
     if (pending) Object.assign(draft, { queued: pending.id, eaten_at: pending.eaten_at });
     if (!draft.items.length && !draft.water_ml) {
       throw new Error(text ? "Rien de reconnu. Précise ta description ou ajoute-le à la main."
@@ -753,7 +853,7 @@ async function analyze(request, { image, text, caption, queue, pending }) {
   } catch (err) {
     if (err instanceof OfflineError && (queue || pending)) {
       // no connection: keep the photo / text and analyze it once back online
-      if (queue) await queueAdd({ ...queue, eaten_at: mealTime() });
+      if (queue) await queueAdd({ ...queue, eaten_at: moment.timeTouched ? `${moment.day}T${moment.time}:00` : mealTime() });
       closeReview();
       renderPending();
       return notice(queue ? "Pas de connexion : c'est gardé sur ton téléphone. Tu pourras l'analyser au retour du réseau (bandeau « en attente »)."
@@ -762,7 +862,7 @@ async function analyze(request, { image, text, caption, queue, pending }) {
     $("analyzing").hidden = true;
     $("error").textContent = err.message;
     $("error").hidden = false;
-    draft = draft || { title: "Repas", items: [], water_ml: 0 };
+    draft = draft || { title: "Repas", items: [], water_ml: 0, ...moment };
     renderDraft();
   }
 }
@@ -777,6 +877,7 @@ function renderDraft() {
   $("analyzing").hidden = true;
   $("result").hidden = false;
   $("meal-title").value = draft.title;
+  renderMoment();
   const box = $("items");
   box.innerHTML = "";
   draft.items.forEach((it, idx) => {
@@ -936,7 +1037,11 @@ $("save").onclick = async () => {
   $("save").disabled = true;
   try {
     // The meal is filed under the displayed day (handy to catch up on yesterday)
-    const eaten_at = draft.eaten_at || (draft.id || day === todayISO() ? null : `${day}T12:00:00`);
+    // time: kept as is unless changed; "now" for a new meal of today; else the day + the moment chosen
+    const chosen = `${draft.day}T${draft.time}:00`;
+    const eaten_at = draft.timeTouched ? chosen
+      : draft.id ? null
+      : draft.eaten_at || (draft.day === todayISO() ? null : chosen);
     const body = { title: draft.title || (items.length ? "Repas" : "Eau"), items: items.map(cleanItem), water_ml, eaten_at };
     try {
       await api(draft.id ? `/api/meals/${draft.id}` : "/api/meals", {

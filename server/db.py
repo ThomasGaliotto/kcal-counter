@@ -148,6 +148,12 @@ def db() -> sqlite3.Connection:
             PRIMARY KEY (meal_id, food)
         );
         CREATE INDEX IF NOT EXISTS portion_log_food ON portion_log(user_id, food, at);
+        CREATE TABLE IF NOT EXISTS skipped_meals (  -- usual meals the user said they skipped (not a gap)
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            day TEXT NOT NULL,
+            slot TEXT NOT NULL,                -- breakfast | lunch | snack | dinner
+            PRIMARY KEY (user_id, day, slot)
+        );
         CREATE TABLE IF NOT EXISTS strava_activity_kcal (
             activity_id INTEGER PRIMARY KEY,
             kcal REAL NOT NULL

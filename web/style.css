@@ -483,6 +483,7 @@ body.reviewing .add-text { display: none; }
 #week-chart .wbar { fill: var(--accent); }
 #week-chart .wbar.over { fill: var(--warn); }
 #week-chart .wbar.today { opacity: .55; }
+#week-chart .wbar.partial { fill: var(--chart-ref); opacity: .5; }
 #week-chart .wgoal { stroke: var(--text); stroke-width: 2; stroke-linecap: round; opacity: .55; }
 #week-chart .wday { fill: var(--muted); font-size: 11px; text-anchor: middle; }
 #week-chart .wday.sel { fill: var(--text); font-weight: 700; }
@@ -491,6 +492,7 @@ body.reviewing .add-text { display: none; }
 .week-key { display: flex; gap: 16px; justify-content: center; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .week-key i { display: inline-block; vertical-align: middle; margin-right: 6px; }
 .key-bar { width: 8px; height: 12px; border-radius: 3px 3px 0 0; background: var(--accent); }
+.key-bar.partial { background: var(--chart-ref); opacity: .5; }
 .key-goal { width: 14px; height: 2px; border-radius: 1px; background: var(--text); opacity: .55; }
 .week-detail { min-height: 2.6em; margin: 8px 2px; font-size: 14px; color: var(--muted); line-height: 1.35; }
 .week-detail b { color: var(--text); }
@@ -558,3 +560,25 @@ body.on-recap .day .nav { visibility: hidden; }
 .weigh-list-box summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 2px; }
 .add-text { margin: 0 0 10px; }
 body.on-recap { padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); }
+
+/* ---------- Meal moment (review) ---------- */
+.moment { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
+.moment .chip { padding: 5px 10px; font-size: 13px; }
+.moment-time {
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; font: inherit; font-size: 16px; /* 16px: avoids iOS auto-zoom */
+}
+.moment-day { color: var(--muted); font-size: 13px; }
+
+/* ---------- Forgotten meals ---------- */
+.gap { border: 1px dashed var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; }
+.gap-head { font-size: 14px; font-weight: 600; }
+.gap-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.gap-actions .chip { padding: 5px 10px; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; }
+.columns.two .gap-actions .chip { padding: 4px 8px; font-size: 12px; }
+.gap-actions .chip.usual { border-color: var(--accent); }
+.gap-actions .chip.skip { color: var(--muted); }
+.gap-link { display: block; background: none; border: 0; padding: 0 2px 10px; color: var(--muted); font-size: 13px; cursor: pointer; }
+body.reviewing .gaps { display: none; }
+.mday.partial { background: var(--bg); color: var(--text); outline: 2px dashed var(--line); outline-offset: -2px; }
+.mk.partial { background: var(--bg); outline: 1px dashed var(--muted); }

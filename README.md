@@ -17,6 +17,7 @@ The small **i** buttons on the cards explain how each number is computed.
 - `server/goals.py`: weight goal, weigh-ins, protein target
 - `server/barcode.py`: packaged products by barcode (Open Food Facts)
 - `server/stats.py`: weekly summary, month calendar and logging streaks
+- `server/gaps.py`: meal slots, forgotten meals and incomplete days
 - `server/portions.py`: learned portions (the grams you usually save for a food)
 - `server/energy.py`: energy expenditure from Strava or Garmin
 - `server/limits.py`: rate limits (login attempts, AI analyses)
@@ -70,6 +71,19 @@ Account menu → **Fonctionnalités** (also asked during the first-run setup) tu
 Account menu → **Fonctionnalités → 🍞 Glucides et lipides** shows two more cards and the carbs / fat fields in the review.
 By default fat is 30 % of the day's calorie goal (9 kcal/g) and carbs are the rest once protein and fat are counted
 (4 kcal/g), so both follow the day's goal. Tap a card to set a fixed target in grams instead.
+
+### Meal moment and forgotten meals
+
+- **Moment**: the review screen has *Petit-déj · Déjeuner · Goûter · Dîner* chips and a time field. A new meal of today
+  is saved at the current time unless changed; on a past day it defaults to noon. Editing a meal can move it too.
+- **Forgotten meals**: a meal slot is *usual* when you logged something in it on at least half of your logged days over
+  the last 4 weeks (from 7 logged days on). When a usual slot is empty on a day (today: once the slot is over), the Jour
+  tab shows "🍽️ Pas de déjeuner noté" with **≈ Habituel** (your typical meal of that slot, the one closest to its
+  median calories, opened in the review to adjust), **✍️ Décrire** (text, saved in that slot) or **Sauté** (you skipped
+  it). On today, a line also points to yesterday's gaps.
+- **Incomplete days**: a logged day with an unresolved gap is left out of the weekly averages, the on-target count and
+  the calibration (a forgotten meal would make the body look like it burns less). The week chart shows it in grey, the
+  calendar with a dashed outline. It still counts for the streak.
 
 ## Accounts and invitations
 

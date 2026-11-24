@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import current_user
 from .db import db
 from .energy import _cached, energy
+from .gaps import day_status
 from .metabolism import daily_base
 
 router = APIRouter(prefix="/api")
@@ -112,6 +113,7 @@ def week(end: date | None = None, user=Depends(current_user)):
     end = min(end or today, today)
     start = end - timedelta(days=6)
     totals = _totals(user["id"], start - timedelta(days=7), end)  # also the week before, to compare
+    status = day_status(user["id"], start - timedelta(days=7), end)
     direction = _direction(user)
 
     days = []
@@ -120,16 +122,22 @@ def week(end: date | None = None, user=Depends(current_user)):
         t = totals.get(d.isoformat(), EMPTY)
         goal = _day_goal(user, d)
         logged = t["kcal"] > 0
+        st = status.get(d.isoformat(), {})
+        complete = st.get("complete") is not False
         days.append({
-            "day": d.isoformat(), "kcal": round(t["kcal"]), "protein_g": round(t["protein"]),
+            "day": d.isoformat(), "complete": complete if logged else None, "missing": st.get("missing", []),
+            "kcal": round(t["kcal"]), "protein_g": round(t["protein"]),
             "carbs_g": round(t["carbs"]), "fat_g": round(t["fat"]), "water_ml": round(t["water"]), "logged": logged, "goal": round(goal) if goal else None,
             # today isn't over: it's shown, but not judged
-            "on_target": on_target(t["kcal"], goal, direction) if logged and goal and d < today else None,
+            # incomplete days (a usual meal not logged) aren't judged either
+            "on_target": on_target(t["kcal"], goal, direction) if logged and complete and goal and d < today else None,
         })
 
     logged = [d for d in days if d["logged"]]
+    full = [d for d in logged if d["complete"]]  # averages without the days with a forgotten meal
     avg = lambda key, rows: round(sum(r[key] for r in rows) / len(rows)) if rows else None  # noqa: E731
-    prev = [v for k, v in totals.items() if date.fromisoformat(k) < start and v["kcal"] > 0]
+    prev = [v for k, v in totals.items() if date.fromisoformat(k) < start and v["kcal"] > 0
+            and status.get(k, {}).get("complete") is not False]
 
     with db() as conn:
         w = conn.execute(
@@ -152,13 +160,14 @@ def week(end: date | None = None, user=Depends(current_user)):
         "start": start.isoformat(), "end": end.isoformat(), "direction": direction,
         "days": days,
         "logged_days": len(logged),
+        "incomplete_days": len(logged) - len(full),
         "on_target_days": sum(1 for d in judged if d["on_target"]), "judged_days": len(judged),
-        "avg_kcal": avg("kcal", logged),
-        "avg_goal": avg("goal", [d for d in logged if d["goal"]]),
+        "avg_kcal": avg("kcal", full),
+        "avg_goal": avg("goal", [d for d in full if d["goal"]]),
         "prev_avg_kcal": round(sum(v["kcal"] for v in prev) / len(prev)) if prev else None,
-        "avg_protein_g": avg("protein_g", logged),
-        "avg_carbs_g": avg("carbs_g", logged),
-        "avg_fat_g": avg("fat_g", logged),
+        "avg_protein_g": avg("protein_g", full),
+        "avg_carbs_g": avg("carbs_g", full),
+        "avg_fat_g": avg("fat_g", full),
         "avg_water_ml": avg("water_ml", [d for d in days if d["water_ml"] > 0]),
         "weight": weight,
         "streak": streak_of(logged_days(user["id"]), today),
@@ -176,6 +185,7 @@ def month(month: str | None = None, user=Depends(current_user)):
         raise HTTPException(400, "Mois invalide (AAAA-MM)") from exc
     end = date(y, m, calendar.monthrange(y, m)[1])
     totals = _totals(user["id"], start, min(end, today))
+    status = day_status(user["id"], start, min(end, today)) if start <= today else {}
     direction = _direction(user)
     days = []
     for k in range((end - start).days + 1):
@@ -183,12 +193,16 @@ def month(month: str | None = None, user=Depends(current_user)):
         t = totals.get(d.isoformat(), EMPTY)
         logged = t["kcal"] > 0
         goal = _day_goal(user, d, cache_only=True) if logged else None
+        complete = status.get(d.isoformat(), {}).get("complete") is not False
         days.append({"day": d.isoformat(), "kcal": round(t["kcal"]), "logged": logged,
+                     "complete": complete if logged else None, "missing": status.get(d.isoformat(), {}).get("missing", []),
                      "goal": round(goal) if goal else None,
-                     "on_target": on_target(t["kcal"], goal, direction) if logged and goal and d < today else None})
+                     "on_target": on_target(t["kcal"], goal, direction)
+                     if logged and complete and goal and d < today else None})
     judged = [d for d in days if d["on_target"] is not None]
     first = logged_days(user["id"])
     return {"month": start.strftime("%Y-%m"), "direction": direction, "days": days,
             "logged_days": sum(d["logged"] for d in days),
+            "incomplete_days": sum(d["complete"] is False for d in days),
             "on_target_days": sum(1 for d in judged if d["on_target"]), "judged_days": len(judged),
             "first_month": first[0].strftime("%Y-%m") if first else today.strftime("%Y-%m")}

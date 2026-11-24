@@ -24,6 +24,7 @@ from .goals import router as goals_router
 from .invites import router as invites_router
 from .metabolism import router as metabolism_router
 from .stats import router as stats_router
+from .gaps import router as gaps_router
 from . import portions
 
 WEB_DIR = ROOT / "web"
@@ -107,6 +108,7 @@ app.include_router(invites_router)
 app.include_router(metabolism_router)
 app.include_router(barcode_router)
 app.include_router(stats_router)
+app.include_router(gaps_router)
 
 
 @app.middleware("http")
