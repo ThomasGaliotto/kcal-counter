@@ -30,7 +30,8 @@ The small **i** buttons on the cards explain how each number is computed.
 ## First-run setup
 
 Right after sign-up, a few full-screen steps guide the new user: profile (sex, birth year, height, weight),
-body shape (silhouette or measured body fat %), daily activity, Strava/Garmin, goal and tracked features,
+body shape (silhouette or measured body fat %), daily activity, Strava/Garmin, goal and tracked features
+(protein, carbs and fat, water, weight),
 then a summary of the daily calories, protein and water. Every step can be skipped ("Plus tard"), and
 account menu → **🦊 Reprendre la configuration** opens it again. Accounts created before this feature skip it.
 
@@ -58,6 +59,11 @@ The app opens without a connection, with the last data seen (service worker, net
 kept on the phone (IndexedDB), shown as "⏳ en attente d'envoi" and counted in the day, then sent automatically when the
 connection is back (or when the app comes to the foreground). A photo or a text can't be analyzed offline: it's kept with
 its time, and a "⏳ à analyser" banner opens its analysis once online. Editing a saved meal needs the connection.
+
+## Tracked features
+
+Account menu → **Fonctionnalités** (also asked during the first-run setup) turns on or off: 💪 protein, 🍞 carbs and fat,
+💧 water and 🎯 weight goal and weigh-ins. With water off, drinks are still recorded with the meals, just not shown.
 
 ## Carbs and fat
 

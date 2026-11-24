@@ -298,6 +298,8 @@ body.reviewing .fab-bar { display: none; }
 }
 .water-row .remove { background: none; border: 0; color: var(--muted); font-size: 22px; width: 32px; height: 32px; }
 .meal-water { color: var(--water); white-space: nowrap; }
+/* water tracking turned off: drinks are still recorded, just not shown */
+body.no-water #water-row, body.no-water #add-water, body.no-water .meal-water, body.no-water .meal-water-sep { display: none !important; }
 .result-total { text-align: right; font-size: 18px; margin: 4px 0 16px; }
 .actions { display: flex; gap: 10px; }
 .actions button { flex: 1; padding: 14px; border-radius: 12px; border: 0; font-weight: 600; }

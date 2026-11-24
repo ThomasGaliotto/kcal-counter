@@ -46,6 +46,7 @@ USER_COLUMNS = {
     "show_protein": "INTEGER NOT NULL DEFAULT 1",      # features shown (set per account)
     "show_weight": "INTEGER NOT NULL DEFAULT 1",       # weight goal, weigh-ins, chart
     "show_macros": "INTEGER NOT NULL DEFAULT 0",       # carbs and fat cards
+    "show_water": "INTEGER NOT NULL DEFAULT 1",        # water card and water in meals
     "carbs_goal": "INTEGER",                           # g/day set by hand (empty = auto, from the kcal goal)
     "fat_goal": "INTEGER",                             # g/day set by hand (empty = auto, 30 % of the kcal goal)
     "strava_athlete": "TEXT",

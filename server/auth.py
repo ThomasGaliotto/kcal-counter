@@ -46,7 +46,7 @@ def _token_hash(token: str) -> str:
 PUBLIC_FIELDS = (
     "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
-    "protein_mode", "protein_value", "show_protein", "show_weight", "show_macros", "carbs_goal", "fat_goal", "morphology", "body_fat_pct", "calibrate", "onboarded",
+    "protein_mode", "protein_value", "show_protein", "show_weight", "show_macros", "show_water", "carbs_goal", "fat_goal", "morphology", "body_fat_pct", "calibrate", "onboarded",
 )
 
 
@@ -60,7 +60,7 @@ def is_admin(user) -> bool:
 def _public(user) -> dict:
     data = {k: user[k] for k in PUBLIC_FIELDS}
     data["show_protein"], data["show_weight"] = bool(user["show_protein"]), bool(user["show_weight"])
-    data["show_macros"] = bool(user["show_macros"])
+    data["show_macros"], data["show_water"] = bool(user["show_macros"]), bool(user["show_water"])
     data["calibrate"] = bool(user["calibrate"])
     data["onboarded"] = bool(user["onboarded"])
     data["is_admin"] = is_admin(user)
@@ -128,6 +128,7 @@ class Profile(BaseModel):
     show_protein: bool | None = None
     show_weight: bool | None = None
     show_macros: bool | None = None
+    show_water: bool | None = None
     carbs_goal: int | None = Field(None, ge=0, le=1500)  # 0 = back to auto
     fat_goal: int | None = Field(None, ge=0, le=500)     # 0 = back to auto
     morphology: int | None = Field(None, ge=0, le=5)  # 0 = clear

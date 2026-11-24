@@ -183,7 +183,7 @@ async function loadDay() {
       const w = document.createElement("span");
       w.className = "meal-water";
       w.textContent = `💧 ${Math.round(m.water_ml)} ml`;
-      if (m.items.length) el.querySelector(".meal-items").append(" · ");
+      if (m.items.length) el.querySelector(".meal-items").append(Object.assign(document.createElement("span"), { className: "meal-water-sep", textContent: " · " }));
       el.querySelector(".meal-items").append(w);
     }
     if (!m.items.length) {
@@ -654,7 +654,7 @@ async function renderWeek() {
   if (me.show_protein && w.avg_protein_g != null) tile("Protéines", `${fmt(w.avg_protein_g)} g`, `/ jour · visé ${fmt(proteinGoal())}`);
   if (me.show_macros && w.avg_carbs_g != null) tile("Glucides", `${fmt(w.avg_carbs_g)} g`, "par jour");
   if (me.show_macros && w.avg_fat_g != null) tile("Lipides", `${fmt(w.avg_fat_g)} g`, "par jour");
-  if (w.avg_water_ml != null) tile("Eau", `${liters(w.avg_water_ml)} L`, "par jour");
+  if (me.show_water && w.avg_water_ml != null) tile("Eau", `${liters(w.avg_water_ml)} L`, "par jour");
   if (me.show_weight && w.weight) {
     const c = w.weight.change;
     tile("Poids", `${c > 0 ? "+" : c < 0 ? "−" : ""}${fmtKg(Math.abs(c))} kg`, `${fmtKg(w.weight.from)} → ${fmtKg(w.weight.to)}`);
@@ -707,7 +707,7 @@ function selectWeekDay(i) {
   const bits = [`<b>${fmt(d.kcal)} kcal</b>${d.goal ? ` / ${fmt(d.goal)} visés` : ""}${verdict}`];
   if (me.show_protein) bits.push(`${fmt(d.protein_g)} g de protéines`);
   if (me.show_macros) bits.push(`${fmt(d.carbs_g)} g de glucides · ${fmt(d.fat_g)} g de lipides`);
-  if (d.water_ml) bits.push(`💧 ${liters(d.water_ml)} L`);
+  if (me.show_water && d.water_ml) bits.push(`💧 ${liters(d.water_ml)} L`);
   $("week-detail").innerHTML = `<b>${name}</b><br>${bits.join(" · ")}`;
 }
 
@@ -1435,6 +1435,7 @@ $("account-btn").onclick = () => {
   $("open-invites").hidden = !me.is_admin;
   $("feat-protein").checked = me.show_protein;
   $("feat-macros").checked = me.show_macros;
+  $("feat-water").checked = me.show_water;
   $("feat-weight").checked = me.show_weight;
   $("account").showModal();
 };
@@ -1951,13 +1952,21 @@ function applyFeatures() {
   $("recap-weight").hidden = !me.show_weight;
   $("macro-cards").hidden = !me.show_macros;
   document.body.classList.toggle("show-macros", !!me.show_macros);
+  document.body.classList.toggle("no-water", !me.show_water);
   $("protein-card").closest(".card-wrap").hidden = !me.show_protein;
-  $("protein-card").closest(".minis").classList.toggle("two", me.show_protein);
+  $("water-gauge").closest(".card-wrap").hidden = !me.show_water;
+  const minis = $("protein-card").closest(".minis");
+  minis.hidden = !me.show_protein && !me.show_water;
+  minis.classList.toggle("two", me.show_protein && me.show_water);
   document.querySelectorAll(".when-weight").forEach((el) => (el.hidden = !me.show_weight));
   renderGoalCard();
 }
 $("feat-protein").onchange = async (e) => {
   try { me = await api("/api/me", jsonPatch({ show_protein: e.target.checked })); applyFeatures(); }
+  catch (err) { e.target.checked = !e.target.checked; notice(err.message, "Erreur"); }
+};
+$("feat-water").onchange = async (e) => {
+  try { me = await api("/api/me", jsonPatch({ show_water: e.target.checked })); applyFeatures(); }
   catch (err) { e.target.checked = !e.target.checked; notice(err.message, "Erreur"); }
 };
 $("feat-macros").onchange = async (e) => {
@@ -2479,11 +2488,15 @@ const OB_STEPS = [
     render: () => obEl(`<h2>Ce que tu veux suivre</h2>
       <div class="features">
         <label class="switch-row"><span>💪 Protéines</span><input id="ob-prot" type="checkbox" role="switch"${ob.show_protein ? " checked" : ""}></label>
+        <label class="switch-row"><span>🍞 Glucides et lipides</span><input id="ob-macros" type="checkbox" role="switch"${ob.show_macros ? " checked" : ""}></label>
+        <label class="switch-row"><span>💧 Eau bue</span><input id="ob-water" type="checkbox" role="switch"${ob.show_water ? " checked" : ""}></label>
         <label class="switch-row"><span>🎯 Objectif de poids et pesées</span><input id="ob-weightfeat" type="checkbox" role="switch"${ob.show_weight ? " checked" : ""}></label>
       </div>
       <p class="hint">Modifiable à tout moment dans le menu du compte.</p>`),
     async save() {
       ob.show_protein = $("ob-prot").checked;
+      ob.show_macros = $("ob-macros").checked;
+      ob.show_water = $("ob-water").checked;
       ob.show_weight = $("ob-weightfeat").checked;
       return finishOnboarding();
     },
@@ -2498,7 +2511,12 @@ const OB_STEPS = [
         if (plan?.kcal_goal || me.energy_source === "none") lines.push(["🔥 Calories", `${fmt(plan?.kcal_goal || me.kcal_goal)} kcal / jour`]);
         else lines.push(["🔥 Calories", "ta dépense du jour " + signed(me.balance_goal) + " kcal"]);
         if (me.show_protein) lines.push(["💪 Protéines", `${fmt(me.protein_goal || 100)} g / jour`]);
-        lines.push(["💧 Eau", `${fmt(me.water_goal)} ml / jour`]);
+        if (me.show_macros) {
+          const kcal = me.energy_source === "none" ? plan?.kcal_goal || me.kcal_goal : null;
+          const mg = kcal && macroGoals(kcal, me.protein_goal || 100);
+          lines.push(["🍞 Glucides · 🥑 Lipides", mg ? `${fmt(mg.carbs)} g · ${fmt(mg.fat)} g / jour` : "selon tes calories du jour"]);
+        }
+        if (me.show_water) lines.push(["💧 Eau", `${fmt(me.water_goal)} ml / jour`]);
         if (m?.bmr) lines.push(["⚙️ Métabolisme de base", `${fmt(m.bmr)} kcal`]);
         const box = d.querySelector("#ob-recap");
         box.innerHTML = "";
@@ -2521,7 +2539,7 @@ const OB_STEPS = [
 async function finishOnboarding(skipped = false) {
   const body = { onboarded: true };
   if (!skipped) {
-    for (const k of ["sex", "birth_year", "height_cm", "weight_kg", "life_factor", "energy_source", "show_protein", "show_weight"]) {
+    for (const k of ["sex", "birth_year", "height_cm", "weight_kg", "life_factor", "energy_source", "show_protein", "show_macros", "show_water", "show_weight"]) {
       if (ob[k] != null && ob[k] !== "") body[k] = ob[k];
     }
     body.morphology = ob.morphology || 0;
@@ -2557,7 +2575,7 @@ function openOnboarding() {
     sex: me.sex, birth_year: me.birth_year, height_cm: me.height_cm, weight_kg: me.weight_kg,
     morphology: me.morphology || 0, body_fat_pct: me.body_fat_pct, life_factor: me.life_factor ?? 1.2,
     energy_source: me.energy_source, goal: plan?.type ?? "", target_weight: plan?.target_weight, target_date: plan?.target_date,
-    show_protein: me.show_protein, show_weight: me.show_weight,
+    show_protein: me.show_protein, show_macros: me.show_macros, show_water: me.show_water, show_weight: me.show_weight,
   };
   obStep = 0;
   renderOnboardStep();
