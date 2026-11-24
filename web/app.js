@@ -2153,31 +2153,64 @@ async function renderWeights() {
   renderWeightList();
 }
 
+/* Smoothed trend: the scale moves by ±1 kg from one day to the next (water, salt, digestion).
+   Exponential moving average with 10 % per day (Hacker's Diet), adjusted for the days between
+   weigh-ins: after a gap of n days the new weigh-in weighs 1 − 0.9^n. */
+const TREND_KEEP = 0.9;
+function withTrend(weights) {
+  let trend = null, prev = null;
+  return weights.map((w) => {
+    const t = toTime(w.day);
+    trend = trend == null ? w.kg : trend + (1 - TREND_KEEP ** Math.max(1, (t - prev) / DAY_MS)) * (w.kg - trend);
+    prev = t;
+    return { ...w, t, trend };
+  });
+}
+// Pace over the last 4 weeks (least squares on the weigh-ins), in kg per week; null if too little data
+function weeklyPace(weights) {
+  const last = toTime(weights[weights.length - 1].day);
+  const pts = weights.filter((w) => last - toTime(w.day) <= 28 * DAY_MS).map((w) => [(toTime(w.day) - last) / DAY_MS, w.kg]);
+  if (pts.length < 3 || -pts[0][0] < 7) return null;
+  const mx = pts.reduce((s, p) => s + p[0], 0) / pts.length, my = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  const den = pts.reduce((s, p) => s + (p[0] - mx) ** 2, 0);
+  return den ? (pts.reduce((s, p) => s + (p[0] - mx) * (p[1] - my), 0) / den) * 7 : null;
+}
+const signedKg = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtKg(Math.abs(v))}`;
+
 function renderWeightStats() {
   const box = $("weight-stats");
   box.innerHTML = "";
   if (!weightsCache.length) return;
+  const series = withTrend(weightsCache);
+  const lastW = series[series.length - 1];
   const first = plan?.start_weight ?? weightsCache[0].kg;
-  const last = weightsCache[weightsCache.length - 1].kg;
-  const delta = last - first;
-  const cells = [["Départ", `${fmtKg(first)} kg`], ["Actuel", `${fmtKg(last)} kg`],
-    ["Variation", `${delta > 0 ? "+" : delta < 0 ? "−" : ""}${fmtKg(Math.abs(delta))} kg`]];
-  for (const [label, value] of cells) {
+  const trend = lastW.trend;
+  const cells = [["Départ", `${fmtKg(first)} kg`],
+    ["Tendance", `${fmtKg(trend)} kg`, `pesée : ${fmtKg(lastW.kg)} kg`],
+    ["Variation", `${signedKg(trend - first)} kg`, "d'après la tendance"]];
+  for (const [label, value, sub] of cells) {
     const d = document.createElement("div");
     d.innerHTML = "<small></small><b></b>";
     d.querySelector("small").textContent = label;
     d.querySelector("b").textContent = value;
+    if (sub) d.append(Object.assign(document.createElement("small"), { textContent: sub }));
     box.append(d);
   }
+  const lines = [];
+  const pace = weeklyPace(weightsCache);
+  if (pace != null) lines.push(`Rythme : ${signedKg(Math.round(pace * 10) / 10)} kg par semaine (4 dernières semaines).`);
   const g = goalLine();
   if (g) {
-    const expected = goalAt(g, toTime(weightsCache[weightsCache.length - 1].day));
-    const ahead = plan.type === "gain" ? last - expected : expected - last; // > 0: ahead
+    const expected = goalAt(g, lastW.t);
+    const ahead = plan.type === "gain" ? trend - expected : expected - trend; // > 0: ahead
+    lines.push(Math.abs(ahead) < 0.15 ? "Pile dans le rythme de ton objectif."
+      : ahead > 0 ? `En avance de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif 👍`
+      : `En retard de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif.`);
+  }
+  if (lines.length) {
     const note = document.createElement("div");
     note.className = "note";
-    note.textContent = Math.abs(ahead) < 0.15 ? "Pile dans le rythme de ton objectif."
-      : ahead > 0 ? `En avance de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif 👍`
-      : `En retard de ${fmtKg(Math.abs(ahead))} kg sur le rythme de ton objectif.`;
+    note.textContent = lines.join(" ");
     box.append(note);
   }
 }
@@ -2203,7 +2236,8 @@ function drawWeightChart() {
     : today - Number(weightRange) * DAY_MS;
   let t1 = weightRange === "all" && g ? Math.max(today, g.t1) : today;
   if (t1 - t0 < 7 * DAY_MS) t0 = t1 - 7 * DAY_MS;
-  const pts = weightsCache.map((w) => ({ t: toTime(w.day), kg: w.kg, day: w.day })).filter((p) => p.t >= t0 && p.t <= t1);
+  // the trend is computed on the whole history, then cut to the period
+  const pts = withTrend(weightsCache).filter((p) => p.t >= t0 && p.t <= t1);
 
   if (!pts.length && !g) {
     svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "empty" }, svg).textContent =
@@ -2247,20 +2281,22 @@ function drawWeightChart() {
     }
   }
 
-  // Weigh-in line
+  // Weigh-ins as light dots, the smoothed trend as the line
+  for (const p of pts) svgEl("circle", { cx: x(p.t), cy: y(p.kg), r: 3, class: "dot raw" }, svg);
   if (pts.length > 1) {
-    svgEl("polyline", { points: pts.map((p) => `${x(p.t)},${y(p.kg)}`).join(" "), class: "line" }, svg);
+    svgEl("polyline", { points: pts.map((p) => `${x(p.t)},${y(p.trend)}`).join(" "), class: "line" }, svg);
   }
-  for (const p of pts) svgEl("circle", { cx: x(p.t), cy: y(p.kg), r: 4, class: "dot" }, svg);
-  if (pts.length) { // direct label on the last value only, on the side away from the goal
+  if (pts.length) { // direct label on the last trend value only, on the side away from the goal
     const p = pts[pts.length - 1];
-    const below = g && p.t >= g.t0 && goalAt(g, p.t) > p.kg && y(p.kg) + 20 < H - pad.b;
-    svgEl("text", { x: x(p.t) - (x(p.t) > W - 50 ? 6 : 0), y: below ? y(p.kg) + 18 : y(p.kg) - 10,
-      "text-anchor": x(p.t) > W - 50 ? "end" : "middle" }, svg).textContent = `${fmtKg(p.kg)} kg`;
+    svgEl("circle", { cx: x(p.t), cy: y(p.trend), r: 4, class: "dot" }, svg);
+    const below = g && p.t >= g.t0 && goalAt(g, p.t) > p.trend && y(p.trend) + 20 < H - pad.b;
+    svgEl("text", { x: x(p.t) - (x(p.t) > W - 50 ? 6 : 0), y: below ? y(p.trend) + 18 : y(p.trend) - 10,
+      "text-anchor": x(p.t) > W - 50 ? "end" : "middle" }, svg).textContent = `${fmtKg(p.trend)} kg`;
   }
 
-  // Legend (two series: the line and the goal)
-  $("chart-key").innerHTML = g ? `<span>Poids</span><span class="ref">Objectif (${plan.label.toLowerCase()})</span>` : "";
+  // Legend: weigh-ins, trend, goal
+  $("chart-key").innerHTML = `<span class="dots">Pesées</span><span>Tendance</span>` +
+    (g ? `<span class="ref">Objectif</span>` : "");
 
   // Hover / touch: vertical guide + tooltip on the nearest weigh-in
   const cross = svgEl("line", { y1: pad.t, y2: H - pad.b, class: "cross", visibility: "hidden" }, svg);
@@ -2276,6 +2312,7 @@ function drawWeightChart() {
     tip.innerHTML = "<small></small><b></b>";
     tip.querySelector("small").textContent = new Date(p.t).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
     tip.querySelector("b").textContent = `${fmtKg(p.kg)} kg`;
+    tip.append(Object.assign(document.createElement("small"), { textContent: `tendance : ${fmtKg(p.trend)} kg` }));
     if (g && p.t >= g.t0) {
       const s = document.createElement("small");
       s.textContent = `objectif ce jour-là : ${fmtKg(goalAt(g, p.t))} kg`;

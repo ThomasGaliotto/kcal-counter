@@ -120,6 +120,10 @@ Without an expenditure source (Strava/Garmin), the kcal goal = basal metabolic r
 
 The **⚖️ Poids** section of the Récap tab shows the weight curve over 1 month, 3 months or everything,
 with the goal's trajectory, and lists weigh-ins (which can be deleted).
+The line is a **smoothed trend** (exponential moving average, 10 % per day, adjusted for the days between weigh-ins):
+each weigh-in is a light dot, since the scale moves by ±1 kg from day to day (water, salt, digestion). "Tendance",
+"Variation" and the comparison with the goal's pace use the trend; "Rythme" is the least-squares slope of the last
+4 weeks of weigh-ins (as for the calibration).
 
 ## Energy expenditure (Strava or Garmin)
 
