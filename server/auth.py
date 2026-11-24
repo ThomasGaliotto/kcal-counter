@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from typing import Literal
 
-from .db import db, garmin_token_dir
+from .db import db, email_fingerprint, garmin_token_dir
 from .limits import limit_auth
 
 COOKIE = "kcal_session"
@@ -44,7 +44,7 @@ def _token_hash(token: str) -> str:
 
 
 PUBLIC_FIELDS = (
-    "id", "email", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
+    "id", "name", "kcal_goal", "water_goal", "energy_source", "balance_goal",
     "sex", "birth_year", "height_cm", "weight_kg", "life_factor", "protein_goal",
     "protein_mode", "protein_value", "show_protein", "show_weight", "show_macros", "show_water", "carbs_goal", "fat_goal", "morphology", "body_fat_pct", "calibrate", "onboarded",
 )
@@ -157,16 +157,16 @@ def auth_config():
 def register(body: Register, request: Request, response: Response):
     code = body.invite_code.strip()
     shared = bool(INVITE_CODE) and hmac.compare_digest(code, INVITE_CODE)
-    email = body.email.strip().lower()
-    if "@" not in email:
+    if "@" not in body.email:
         raise HTTPException(400, "Adresse e-mail invalide")
+    email = email_fingerprint(body.email)  # the address itself is never stored
     with db() as conn:
         if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
             raise HTTPException(409, "Un compte existe déjà avec cet e-mail")
         first = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         need_invite = not (first or OPEN_SIGNUP or shared)
         if need_invite and not conn.execute(
-            "SELECT 1 FROM invites WHERE code = ? AND used_by IS NULL AND expires_at > ?",
+            "SELECT 1 FROM invites WHERE code = ? AND used_at IS NULL AND expires_at > ?",
             (code, datetime.now().isoformat()),
         ).fetchone():
             raise HTTPException(403, "Invitation invalide, déjà utilisée ou expirée")
@@ -176,9 +176,10 @@ def register(body: Register, request: Request, response: Response):
         )
         user_id = cur.lastrowid
         if need_invite:  # an invitation works only once (checked again against double submits)
+            # once used, the invitation forgets for whom it was: it can't be linked to the account
             used = conn.execute(
-                "UPDATE invites SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL",
-                (user_id, datetime.now().isoformat(), code),
+                "UPDATE invites SET used_at = ?, note = '' WHERE code = ? AND used_at IS NULL",
+                (datetime.now().isoformat(), code),
             )
             if used.rowcount != 1:
                 raise HTTPException(403, "Invitation déjà utilisée")
@@ -192,7 +193,7 @@ def register(body: Register, request: Request, response: Response):
 @router.post("/auth/login", dependencies=[Depends(limit_auth)])
 async def login(body: Login, request: Request, response: Response):
     with db() as conn:
-        user = conn.execute("SELECT * FROM users WHERE email = ?", (body.email.strip().lower(),)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE email = ?", (email_fingerprint(body.email),)).fetchone()
     if not user or not check_password(body.password, user["pw_hash"]):
         await asyncio.sleep(1)  # slows down repeated password guesses
         raise HTTPException(401, "E-mail ou mot de passe incorrect")

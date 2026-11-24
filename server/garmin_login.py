@@ -9,14 +9,14 @@ only the access tokens are stored (in a file readable by you only) in data/garmi
 import getpass
 import sys
 
-from .db import db, garmin_token_dir
+from .db import db, email_fingerprint, garmin_token_dir
 
 
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("Usage: python -m server.garmin_login <email de ton compte Kcal>")
     with db() as conn:
-        user = conn.execute("SELECT id, name FROM users WHERE email = ?", (sys.argv[1].strip().lower(),)).fetchone()
+        user = conn.execute("SELECT id, name FROM users WHERE email = ?", (email_fingerprint(sys.argv[1]),)).fetchone()
     if not user:
         sys.exit("Aucun compte Kcal avec cet e-mail. Crée-le d'abord dans l'app.")
 

@@ -1,5 +1,6 @@
 """SQLite connection and schema (with lightweight migrations of existing databases)."""
 
+import hashlib
 import os
 import sqlite3
 from pathlib import Path
@@ -56,6 +57,17 @@ USER_COLUMNS = {
 }
 
 
+# E-mails are never stored: only a fingerprint used to find the account at login.
+# scrypt (slow on purpose) with a fixed salt: the same address always gives the same fingerprint,
+# but nobody (the administrator included) can read the addresses back from the database.
+EMAIL_PREFIX = "h1$"
+
+
+def email_fingerprint(email: str) -> str:
+    digest = hashlib.scrypt(email.strip().lower().encode(), salt=b"kcal-email-v1", n=2**14, r=8, p=1)
+    return EMAIL_PREFIX + digest.hex()
+
+
 def garmin_token_dir(user_id: int) -> Path:
     return GARMIN_DIR / f"user_{int(user_id)}"
 
@@ -69,6 +81,7 @@ def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA secure_delete = ON")  # deleted or replaced data (old e-mails, notes) is wiped from the file
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -108,6 +121,9 @@ def db() -> sqlite3.Connection:
             conn.execute(f"ALTER TABLE users ADD COLUMN {name} {definition}")
             if name == "onboarded":  # accounts that existed before the setup screens skip it
                 conn.execute("UPDATE users SET onboarded = 1")
+    # accounts from before fingerprints: replace the address
+    for u in conn.execute("SELECT id, email FROM users WHERE email NOT LIKE 'h1$%'").fetchall():
+        conn.execute("UPDATE users SET email = ? WHERE id = ?", (email_fingerprint(u["email"]), u["id"]))
     had_portions = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'portion_log'").fetchone()
     conn.executescript(
         """
@@ -160,6 +176,10 @@ def db() -> sqlite3.Connection:
         );
         """
     )
+    # used invitations from before: forget for whom they were and which account they opened
+    stale = "used_at IS NOT NULL AND (note != '' OR used_by IS NOT NULL)"
+    if conn.execute(f"SELECT 1 FROM invites WHERE {stale} LIMIT 1").fetchone():
+        conn.execute(f"UPDATE invites SET note = '', used_by = NULL WHERE {stale}")
     if not had_portions:
         from .portions import backfill  # late import: portions uses db()
         backfill(conn)

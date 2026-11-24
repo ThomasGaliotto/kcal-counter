@@ -26,10 +26,10 @@ def _link(request: Request, code: str) -> str:
 
 def _row(request: Request, r) -> dict:
     now = datetime.now().isoformat()
-    status = "used" if r["used_by"] or r["used_at"] else "expired" if r["expires_at"] <= now else "pending"
+    status = "used" if r["used_at"] else "expired" if r["expires_at"] <= now else "pending"
     return {
         "code": r["code"], "note": r["note"], "created_at": r["created_at"], "expires_at": r["expires_at"],
-        "used_at": r["used_at"], "used_name": r["used_name"], "status": status,
+        "used_at": r["used_at"], "status": status,
         "link": _link(request, r["code"]) if status == "pending" else None,
     }
 
@@ -37,8 +37,7 @@ def _row(request: Request, r) -> dict:
 def _list(request: Request) -> list[dict]:
     with db() as conn:
         rows = conn.execute(
-            """SELECT invites.*, users.name AS used_name FROM invites
-               LEFT JOIN users ON users.id = invites.used_by ORDER BY created_at DESC LIMIT 50"""
+            "SELECT * FROM invites ORDER BY created_at DESC LIMIT 50"
         ).fetchall()
     return [_row(request, r) for r in rows]
 
