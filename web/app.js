@@ -322,7 +322,8 @@ const INFO = {
     if (alcoholWater) target.push(`+${fmt(alcoholWater)} ml pour ${alcoholG} g d'alcool: l'alcool fait uriner davantage (environ 10 ml par gramme), il faut compenser.`);
     return [...target, "",
       "Ce qui compte: l'eau et toutes les boissons sans alcool (café, thé, lait, jus, soda…).",
-      "L'alcool ne compte pas, ni l'eau contenue dans les aliments (soupe, fruits): elle est déjà prévue dans le repère des 2 L, dont environ 20 % vient de la nourriture.",
+      "Soupes, bouillons et veloutés comptent pour 90 % de leur volume: un bol de 300 ml = 270 ml d'eau.",
+      "L'alcool ne compte pas, ni l'eau des aliments solides (fruits, légumes, yaourts): elle est déjà prévue dans le repère des 2 L, dont environ 20 % vient de la nourriture.",
     ].join("\n");
   },
   goal() {
@@ -946,7 +947,15 @@ function renderDraft() {
       refresh();
     };
     grams.oninput = () => {
-      it.grams = Number(grams.value) || 0;
+      const g = Number(grams.value) || 0;
+      // a drink or a soup: its water follows the quantity (same share of the volume)
+      if (it.drink_ml && it.grams > 0) {
+        const ml = Math.round((g * it.drink_ml) / it.grams);
+        draft.water_ml = Math.max(0, (draft.water_ml || 0) + ml - it.drink_ml);
+        it.drink_ml = ml;
+        renderDraftWater();
+      }
+      it.grams = g;
       if (it.usual) { it.usual = false; showUsual(); }
       refresh();
     };

@@ -4,8 +4,8 @@ Snap a photo of your meal: a local AI (Ollama) recognises the foods and estimate
 You fix anything that's off, save it, and the app keeps your daily total.
 
 It tracks hydration too: plain water and every non-alcoholic drink (coffee, tea, milk, juice, soda…) fill the blue gauge.
-Alcohol and water contained in food (soup, fruit) don't count: the ~2 L/day guideline is for drinks, food already
-provides about 20 % of daily water.
+Soups and broths count for 90 % of their volume (a 300 ml bowl = 270 ml). Alcohol and water contained in solid food
+(fruit, vegetables) don't count: the ~2 L/day guideline is for drinks, food already provides about 20 % of daily water.
 Alcohol makes you lose water (about 10 ml of extra urine per gram of alcohol), so it raises the day's
 water target instead ("dont +260 ml alcool"), like sport does.
 

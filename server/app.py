@@ -34,7 +34,8 @@ MAX_UPLOAD = 20 * 1024 * 1024  # uploaded photo: 20 MB max
 MAX_SIDE = 1024  # the photo is downscaled: faster, and enough to recognise a dish
 
 # Hydration: every non-alcoholic drink counts (the ~2 L/day guideline covers all drinks);
-# water inside food (soup, fruit) is already part of the ~20 % that comes from food, alcohol dehydrates.
+# water inside solid food (fruit, vegetables) is already part of the ~20 % that comes from food, alcohol dehydrates.
+# Soups and broths are drunk more than eaten: they count for 90 % of their volume (see _clean_item).
 # The model gives each drink's volume (drink_ml) and alcohol strength (abv); the server adds them up
 # (see ask_model) and raises the day's water target for the alcohol (see list_meals).
 DRINKS_RULE = """EAU ET BOISSONS:
@@ -42,8 +43,8 @@ DRINKS_RULE = """EAU ET BOISSONS:
 - Toute autre boisson va dans items avec ses calories (même ~0 pour un café noir ou un thé).
 - drink_ml (pour chaque élément de items) = son volume en millilitres si c'est une boisson NON alcoolisée
   (café, thé, infusion, lait, boisson végétale, jus, soda…), sinon 0.
-- drink_ml = 0 pour l'alcool (bière, vin, cidre, spiritueux, cocktail) et pour tout ce qui se mange,
-  y compris soupe, bouillon, fruits et yaourts.
+- drink_ml = 0 pour l'alcool (bière, vin, cidre, spiritueux, cocktail) et pour tout ce qui se mange
+  (fruits, yaourts…). Pour une soupe ou un bouillon, mets aussi 0: c'est calculé à part.
 - abv (pour chaque élément de items) = degré d'alcool en % vol. si c'est une boisson alcoolisée
   (bière ~5, vin ~12, cidre ~5, champagne ~12, spiritueux ~40, cocktail ~15), sinon 0."""
 
@@ -165,6 +166,13 @@ ALCOHOL = re.compile(r"\b(bières?|vins?|cidre|champagne|prosecco|crémant|rosé
                      r"apéritif|cocktail|spritz|sangria|liqueur|cognac|armagnac|calvados|kir|mojito|punch|porto|martini)\b", re.I)
 
 
+# liquid dishes: ~90 % of their volume counts toward hydration (the rest is vegetables, cream, noodles…)
+SOUP = re.compile(r"\b(soupes?|potages?|velout[ée]s?|bouillons?|gazpachos?|consomm[ée]s?|minestrone|bisques?|"
+                  r"garbure|chorba|harira|salmorejo)\b", re.I)
+SOUP_NOT = re.compile(r"cuill|c\. ?à ?s|cube", re.I)  # "1 cuillère à soupe d'huile", "bouillon cube"
+SOUP_WATER = 0.9
+
+
 def _clean_item(it: dict) -> dict:
     it["grams"] = max(0, round(it.get("grams") or 0))
     for k in ("kcal_100g", "protein_100g", "carbs_100g", "fat_100g"):
@@ -174,8 +182,11 @@ def _clean_item(it: dict) -> dict:
     alcohol_free = re.search(r"sans alcool|0[,.]?0 ?%", it.get("name", ""), re.I)
     if alcohol_free:
         it["abv"] = 0.0
-    if it["abv"] >= 1.2 or (ALCOHOL.search(it.get("name", "")) and not alcohol_free):
+    name = it.get("name", "")
+    if it["abv"] >= 1.2 or (ALCOHOL.search(name) and not alcohol_free):
         it["drink_ml"] = 0  # alcohol dehydrates: never counted, even if the model says so
+    elif SOUP.search(name) and not SOUP_NOT.search(name):
+        it["drink_ml"] = round(it["grams"] * SOUP_WATER)  # grams stay the soup's weight
     elif it["drink_ml"]:
         it["grams"] = it["drink_ml"]  # a drink weighs about its volume (the model sometimes gives the tea leaves)
     return it
