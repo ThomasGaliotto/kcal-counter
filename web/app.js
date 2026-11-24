@@ -46,7 +46,7 @@ async function api(path, opts) {
 
 // ---------- Daily log ----------
 async function loadDay() {
-  $("day-label").textContent = dayLabel(day);
+  if (tab === "day") $("day-label").textContent = dayLabel(day);
   $("next").disabled = day >= todayISO();
   const { water_goal } = me;
   const shownDay = day;
@@ -525,13 +525,29 @@ const WEEKDAY = ["D", "L", "M", "M", "J", "V", "S"];
 const longDay = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "short" });
 const liters = (ml) => fmt(Math.round(ml / 100) / 10);
 
-async function openWeek() {
-  if ($("account").open) $("account").close();
-  weekEnd = todayISO();
-  monthOf = todayISO().slice(0, 7);
-  showView("week");
-  $("week-dialog").showModal();
-  await renderWeek();
+// ---------- Tabs: the day / the recap (weight, week, month) ----------
+let tab = "day";
+function setTab(next) {
+  tab = next;
+  for (const t of ["day", "recap"]) {
+    $(`${t}-view`).hidden = t !== next;
+    $(`tab-${t}`).classList.toggle("active", t === next);
+    $(`tab-${t}`).setAttribute("aria-selected", t === next);
+  }
+  document.body.classList.toggle("on-recap", next === "recap");
+  $("day-label").textContent = next === "recap" ? "Récap" : dayLabel(day);
+  window.scrollTo({ top: 0 });
+  if (next === "recap") renderRecap();
+}
+$("tab-day").onclick = () => setTab("day");
+$("tab-recap").onclick = () => { if (tab !== "recap") setTab("recap"); };
+
+function renderRecap() {
+  weekEnd ||= todayISO();
+  monthOf ||= todayISO().slice(0, 7);
+  $("recap-weight").hidden = !me.show_weight;
+  if (me.show_weight) renderWeights().catch(() => {});
+  if ($("month-view").hidden) renderWeek(); else renderMonth();
 }
 function showView(view) {
   for (const v of ["week", "month"]) {
@@ -589,7 +605,7 @@ async function renderMonth() {
       (state === "ok" ? ", dans l'objectif" : state === "off" ? ", hors objectif" : "");
     b.setAttribute("aria-label", `${longDay(d.day)} : ${what}`);
     b.title = what;
-    b.onclick = () => { $("week-dialog").close(); day = d.day; loadDay(); };
+    b.onclick = () => { day = d.day; setTab("day"); loadDay(); };
     grid.append(b);
   }
   const verdict = { lose: "sous l'objectif", gain: "objectif atteint", maintain: "à ±10 % près" }[res.direction];
@@ -598,9 +614,6 @@ async function renderMonth() {
       (res.judged_days ? ` · <b>${res.on_target_days} / ${res.judged_days}</b> dans l'objectif (${verdict})` : "")
     : "Rien de noté ce mois-ci.";
 }
-$("week-btn").onclick = openWeek;
-$("open-week").onclick = openWeek;
-$("week-close").onclick = () => $("week-dialog").close();
 $("week-prev").onclick = () => { weekEnd = shiftDay(weekEnd, -7); renderWeek(); };
 $("week-next").onclick = () => { if (weekEnd < todayISO()) { weekEnd = shiftDay(weekEnd, 7); renderWeek(); } };
 
@@ -1935,6 +1948,7 @@ async function refreshGoal() {
 
 // Features that can be turned off per account (account menu)
 function applyFeatures() {
+  $("recap-weight").hidden = !me.show_weight;
   $("macro-cards").hidden = !me.show_macros;
   document.body.classList.toggle("show-macros", !!me.show_macros);
   $("protein-card").closest(".card-wrap").hidden = !me.show_protein;
@@ -2102,7 +2116,7 @@ $("weigh-btn").onclick = () => {
 async function afterWeightChange() {
   await refreshGoal();
   loadDay();
-  if ($("weights-dialog").open) renderWeights();
+  if (tab === "recap") renderRecap();
 }
 
 // ---------- Weight history ----------
@@ -2129,14 +2143,10 @@ function goalLine() {
 }
 const goalAt = (g, t) => g.w0 + (g.w1 - g.w0) * Math.min(1, Math.max(0, (t - g.t0) / (g.t1 - g.t0)));
 
-async function openWeights() {
-  if ($("account").open) $("account").close();
-  $("weights-dialog").showModal();
-  await renderWeights();
-}
-
 async function renderWeights() {
   weightsCache = await api("/api/weights?days=3650");
+  $("weights-add").hidden = !!plan; // the goal card already has "Se peser"
+  $("weight-list-title").textContent = `Pesées (${weightsCache.length})`;
   document.querySelectorAll(".range-chips .chip").forEach((c) => c.classList.toggle("active", c.dataset.range === weightRange));
   renderWeightStats();
   drawWeightChart();
@@ -2314,10 +2324,7 @@ document.querySelectorAll(".range-chips .chip").forEach((chip) => (chip.onclick 
   document.querySelectorAll(".range-chips .chip").forEach((c) => c.classList.toggle("active", c === chip));
   drawWeightChart();
 }));
-$("weights-close").onclick = () => $("weights-dialog").close();
 $("weights-add").onclick = () => $("weigh-btn").onclick();
-$("chart-btn").onclick = openWeights;
-$("open-weights").onclick = openWeights;
 
 // ---------- Onboarding: first-run setup, one question per screen ----------
 let ob = null; // answers being collected

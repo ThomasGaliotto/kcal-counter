@@ -40,9 +40,7 @@
       <button id="account-close" class="remove" aria-label="Fermer">×</button>
     </div>
     <button id="open-goal" class="sheet-btn when-weight">🎯 Mon objectif</button>
-    <button id="open-weights" class="sheet-btn when-weight">📈 Évolution du poids</button>
-    <button id="open-week" class="sheet-btn">📊 Bilan et calendrier</button>
-    <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
+        <button id="open-settings" class="sheet-btn">🔥 Dépense énergétique</button>
     <button id="open-invites" class="sheet-btn" hidden>✉️ Inviter quelqu'un</button>
     <div class="features">
       <div class="features-title">Fonctionnalités</div>
@@ -92,26 +90,6 @@
     <div id="invite-list" class="invite-list"></div>
   </dialog>
 
-  <dialog id="weights-dialog" class="sheet settings weights">
-    <div class="sheet-head">
-      <strong>📈 Évolution du poids</strong>
-      <button id="weights-close" type="button" class="remove" aria-label="Fermer">×</button>
-    </div>
-    <div class="chips range-chips" role="group" aria-label="Période">
-      <button type="button" class="chip" data-range="30">1 mois</button>
-      <button type="button" class="chip" data-range="90">3 mois</button>
-      <button type="button" class="chip" data-range="all">Tout</button>
-    </div>
-    <div id="weight-stats" class="weight-stats"></div>
-    <div class="chart-wrap">
-      <svg id="weight-chart" role="img" aria-label="Courbe du poids"></svg>
-      <div id="chart-tip" class="chart-tip" hidden></div>
-    </div>
-    <div id="chart-key" class="chart-key"></div>
-    <button id="weights-add" type="button" class="primary wide">⚖️ Ajouter une pesée</button>
-    <h3>Pesées</h3>
-    <div id="weight-list" class="weight-list"></div>
-  </dialog>
 
   <dialog id="goal-dialog" class="sheet settings">
     <form id="goal-form" method="dialog">
@@ -173,41 +151,6 @@
     <p class="hint small-print">Valeurs d'<a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, base collaborative et ouverte.</p>
   </dialog>
 
-  <dialog id="week-dialog" class="sheet settings week">
-    <div class="sheet-head">
-      <strong>📊 Bilan</strong>
-      <button id="week-close" type="button" class="remove" aria-label="Fermer">×</button>
-    </div>
-    <div class="chips view-tabs" role="tablist">
-      <button id="tab-week" class="chip active" type="button" role="tab" aria-selected="true">Semaine</button>
-      <button id="tab-month" class="chip" type="button" role="tab" aria-selected="false">Mois</button>
-    </div>
-    <div id="month-view" hidden>
-      <div class="week-nav">
-        <button id="month-prev" type="button" class="nav" aria-label="Mois précédent">‹</button>
-        <span id="month-label"></span>
-        <button id="month-next" type="button" class="nav" aria-label="Mois suivant">›</button>
-      </div>
-      <div id="month-grid" class="month-grid"></div>
-      <div class="week-key month-key"><span><i class="mk ok"></i>dans l'objectif</span><span><i class="mk off"></i>hors objectif</span><span><i class="mk logged"></i>noté</span></div>
-      <p id="month-summary" class="week-detail"></p>
-      <p class="hint">Touche un jour pour l'ouvrir.</p>
-    </div>
-    <div id="week-view">
-    <div class="week-nav">
-      <button id="week-prev" type="button" class="nav" aria-label="Semaine précédente">‹</button>
-      <span id="week-range"></span>
-      <button id="week-next" type="button" class="nav" aria-label="Semaine suivante">›</button>
-    </div>
-    <div id="week-streak" class="week-streak"></div>
-    <div class="chart-wrap">
-      <svg id="week-chart" role="img" aria-label="Calories mangées par jour"></svg>
-    </div>
-    <div class="week-key"><span><i class="key-bar"></i>mangé</span><span><i class="key-goal"></i>objectif du jour</span></div>
-    <p id="week-detail" class="week-detail"></p>
-    <div id="week-stats" class="weight-stats"></div>
-    </div>
-  </dialog>
 
   <dialog id="settings" class="sheet settings">
     <form id="settings-form" method="dialog">
@@ -311,6 +254,7 @@
   </header>
 
   <main>
+   <div id="day-view">
 
     <section id="review" hidden>
       <img id="preview" alt="Photo du repas">
@@ -402,6 +346,35 @@
         </div>
       </div>
       <button id="pending-bar" class="pending-bar" type="button" hidden></button>
+      <p id="energy-warn" class="hint warn-text" hidden></p>
+
+      <div id="projection" class="card projection" hidden>
+        <button class="info" type="button" data-info="projection" aria-label="Comment c'est calculé ?">i</button>
+        <div class="card-label">Projection à minuit</div>
+        <div class="proj-row"><span>Brûlé prévu</span><b id="proj-burned"></b></div>
+        <div class="proj-row"><span>Bilan si tu ne manges plus</span><b id="proj-balance"></b></div>
+        <div class="proj-row"><span id="proj-left-label">Encore possible</span><b id="proj-left"></b></div>
+      </div>
+    </section>
+
+    <button id="text-btn" class="add-text" type="button">✍️ Ajouter un repas en texte</button>
+    <div id="columns" class="columns">
+      <section class="col">
+        <h2 class="col-title" id="meals-title" hidden>Repas</h2>
+        <div id="meals"></div>
+        <p id="empty" class="empty" hidden>Aucun repas ce jour-là.</p>
+      </section>
+      <section class="col" id="activities-col" hidden>
+        <h2 class="col-title">Activités</h2>
+        <div id="activities"></div>
+        <p id="no-activity" class="empty small" hidden>Aucune activité.</p>
+      </section>
+    </div>
+   </div>
+
+   <div id="recap-view" hidden>
+    <section id="recap-weight" class="recap-section">
+      <h2 class="recap-title">⚖️ Poids</h2>
       <div id="goal-card" class="card goal-card" hidden>
         <button class="info" type="button" data-info="goal" aria-label="Comment c'est calculé ?">i</button>
         <div class="goal-head">
@@ -413,42 +386,79 @@
         <div class="goal-foot">
           <span id="goal-rate" class="sub"></span>
           <span class="goal-btns">
-            <button id="chart-btn" type="button" class="weigh-btn" aria-label="Voir l'évolution du poids">📈</button>
             <button id="weigh-btn" type="button" class="weigh-btn">⚖️ Se peser</button>
           </span>
         </div>
         <p id="goal-msg" class="hint" hidden></p>
       </div>
       <button id="goal-empty" type="button" class="card goal-empty" hidden>🎯 Définir un objectif (perte de poids, muscle…)</button>
-      <p id="energy-warn" class="hint warn-text" hidden></p>
-      <button id="week-btn" type="button" class="week-btn">
-        <span id="streak-badge" class="streak-badge" hidden></span>
-        <span class="week-btn-label">📊 Bilan de la semaine</span><span class="chev">›</span>
-      </button>
-
-      <div id="projection" class="card projection" hidden>
-        <button class="info" type="button" data-info="projection" aria-label="Comment c'est calculé ?">i</button>
-        <div class="card-label">Projection à minuit</div>
-        <div class="proj-row"><span>Brûlé prévu</span><b id="proj-burned"></b></div>
-        <div class="proj-row"><span>Bilan si tu ne manges plus</span><b id="proj-balance"></b></div>
-        <div class="proj-row"><span id="proj-left-label">Encore possible</span><b id="proj-left"></b></div>
+      <div id="weight-box" class="card recap-card">
+      <div class="chips range-chips" role="group" aria-label="Période">
+        <button type="button" class="chip" data-range="30">1 mois</button>
+        <button type="button" class="chip" data-range="90">3 mois</button>
+        <button type="button" class="chip" data-range="all">Tout</button>
+      </div>
+      <div id="weight-stats" class="weight-stats"></div>
+      <div class="chart-wrap">
+        <svg id="weight-chart" role="img" aria-label="Courbe du poids"></svg>
+        <div id="chart-tip" class="chart-tip" hidden></div>
+      </div>
+      <div id="chart-key" class="chart-key"></div>
+      <button id="weights-add" type="button" class="primary wide">⚖️ Ajouter une pesée</button>
+      <details class="weigh-list-box">
+        <summary id="weight-list-title">Pesées</summary>
+        <div id="weight-list" class="weight-list"></div>
+      </details>
       </div>
     </section>
-
-    <div id="columns" class="columns">
-      <section class="col">
-        <h2 class="col-title" id="meals-title" hidden>Repas</h2>
-        <div id="meals"></div>
-        <p id="empty" class="empty" hidden>Aucun repas ce jour-là.</p>
-        <button id="text-btn" class="add-text" type="button">✍️ Ajouter un repas en texte</button>
-      </section>
-      <section class="col" id="activities-col" hidden>
-        <h2 class="col-title">Activités</h2>
-        <div id="activities"></div>
-        <p id="no-activity" class="empty small" hidden>Aucune activité.</p>
-      </section>
-    </div>
+    <section class="recap-section">
+      <h2 class="recap-title">📊 Bilan</h2>
+      <div class="card recap-card">
+      <div class="chips view-tabs" role="tablist">
+        <button id="tab-week" class="chip active" type="button" role="tab" aria-selected="true">Semaine</button>
+        <button id="tab-month" class="chip" type="button" role="tab" aria-selected="false">Mois</button>
+      </div>
+      <div id="month-view" hidden>
+        <div class="week-nav">
+          <button id="month-prev" type="button" class="nav" aria-label="Mois précédent">‹</button>
+          <span id="month-label"></span>
+          <button id="month-next" type="button" class="nav" aria-label="Mois suivant">›</button>
+        </div>
+        <div id="month-grid" class="month-grid"></div>
+        <div class="week-key month-key"><span><i class="mk ok"></i>dans l'objectif</span><span><i class="mk off"></i>hors objectif</span><span><i class="mk logged"></i>noté</span></div>
+        <p id="month-summary" class="week-detail"></p>
+        <p class="hint">Touche un jour pour l'ouvrir.</p>
+      </div>
+      <div id="week-view">
+      <div class="week-nav">
+        <button id="week-prev" type="button" class="nav" aria-label="Semaine précédente">‹</button>
+        <span id="week-range"></span>
+        <button id="week-next" type="button" class="nav" aria-label="Semaine suivante">›</button>
+      </div>
+      <div id="week-streak" class="week-streak"></div>
+      <div class="chart-wrap">
+        <svg id="week-chart" role="img" aria-label="Calories mangées par jour"></svg>
+      </div>
+      <div class="week-key"><span><i class="key-bar"></i>mangé</span><span><i class="key-goal"></i>objectif du jour</span></div>
+      <p id="week-detail" class="week-detail"></p>
+      <div id="week-stats" class="weight-stats"></div>
+      </div>
+      </div>
+    </section>
+   </div>
   </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Vues">
+    <button id="tab-day" class="tab active" type="button" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span>Jour</span>
+    </button>
+    <button id="tab-recap" class="tab" type="button" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      <span>Récap</span>
+      <span id="streak-badge" class="streak-badge" hidden></span>
+    </button>
+  </nav>
 
   <div class="fab-bar">
     <label class="fab" aria-label="Prendre une photo">

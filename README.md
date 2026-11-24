@@ -87,7 +87,8 @@ Everyone has their own log and goals, stored on the server.
 
 ## Weekly summary, calendar and streaks
 
-**📊 Bilan** (under the cards, or in the account menu) has two tabs. **Semaine** shows the last 7 days: calories eaten per day
+The app has two tabs at the bottom: **Jour** (the day's cards, the text entry above the meals, the camera buttons) and
+**Récap** (weight goal, weight curve and weigh-ins, then the summary). The **📊 Bilan** section of Récap has two tabs. **Semaine** shows the last 7 days: calories eaten per day
 against that day's goal, average intake (and versus the week before), days logged, days on target, average protein
 and water (and carbs / fat when shown), and the weight change. Arrows move week by week.
 **Mois** is a calendar: each day is green when on target, orange when off, grey when logged but not judged; tapping a
@@ -117,7 +118,7 @@ Without an expenditure source (Strava/Garmin), the kcal goal = basal metabolic r
 **Protein**: tap the protein card to override the target, either in **grams per day** or in **g/kg**
 (recomputed from each new weigh-in). "Auto" goes back to the goal's value.
 
-**📈 Évolution du poids** (account menu) shows the weight curve over 1 month, 3 months or everything,
+The **⚖️ Poids** section of the Récap tab shows the weight curve over 1 month, 3 months or everything,
 with the goal's trajectory, and lists weigh-ins (which can be deleted).
 
 ## Energy expenditure (Strava or Garmin)
